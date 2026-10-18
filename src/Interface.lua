@@ -56,7 +56,7 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.7",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 5.8",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
@@ -133,15 +133,18 @@ return function(ctx)
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
-    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready. Fast sidestep adds a brief local speed burst and restores your previous speed. Changing joystick direction cancels it. The game may correct the burst.")
+    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready. Fast sidestep adds a brief local speed burst and restores your previous speed. Changing joystick direction cancels it. If the game replaces burst speed, it continues at game-controlled speed. Locked abilities/cutscenes prevent movement.")
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
     toggle(defense,"FastSidestep","Fast sidestep")
     slider(defense,"InstinctBurstSpeed","Burst speed",24,96)
     slider(defense,"InstinctRange","Nearby attack range",6,24)
     slider(defense,"InstinctMaxDistance","Sidestep limit",4,12)
-    local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,48));instinct.TextWrapped=true
+    local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,60));instinct.TextWrapped=true
     button(defense,"TestDodge","Test sidestep",function()
         local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Sidestep requested · see report" or (reason or "Test blocked")
+    end)
+    button(defense,"TestNativeDash","Test game dash",function()
+        local ok,reason=API.Instinct.TestDodge(true);footer.Text=ok and "Native dash input requested · see report" or (reason or "Dash unavailable")
     end)
     button(defense,"RecordDodge","Record nearby attacks · 10 sec",function()
         API.Instinct.RecordEncounter();footer.Text="Recording nearby attacks for 10 seconds"
@@ -216,7 +219,7 @@ return function(ctx)
         for _,paint in ipairs(paints) do paint() end
         play.Text=API.Enabled and "STOP" or "PLAY"
         play.BackgroundColor3=API.Enabled and Color3.fromRGB(99,52,70) or C.Accent;play.TextColor3=API.Enabled and C.Text or C.Base
-        status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.AutomaticMoves.." automatic · "..API.Instinct.TestMoves.." tests"..(API.Instinct.Recording and " · RECORDING" or "")
+        status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.AutomaticMoves.." automatic · "..API.Instinct.TestMoves.." tests"..(API.Instinct.Recording and " · RECORDING" or "")..(API.Instinct.BurstRejected and " · boost overridden by game" or "")
     end
     function M.Destroy()
         if dead then return end;dead=true;sliderDrag=nil;drag=nil

@@ -62,7 +62,7 @@ return function(url)
 end
 end)()("https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/assets/rift_logo.jpg")
 local function normalize(value) return type(value)=="string" and value:lower():gsub("[^%w]","") or "" end
-local API={Game="Superhero Arena",Version="5.7",Enabled=false,Target=nil,Status="Off"}
+local API={Game="Superhero Arena",Version="5.8",Enabled=false,Target=nil,Status="Off"}
 local Config={ESP=true,Chams=true,Names=true,Roles=true,ChamOpacity=0.45,GuessRoles=true,
     UltraInstinct=false,InstinctRange=16,InstinctMaxDistance=10,FastSidestep=true,InstinctBurstSpeed=64,ReduceMotion=false}
 API.Config=Config
@@ -886,9 +886,8 @@ local function nativeDash(hum,root,targetRoot,distance,clear)
 end
 local function defensiveDash(hum,root,direction)
     if elapsedTime<brain.DashRetry then return false,"Dash request retry delay" end
-    if elapsedTime<brain.NextAt or elapsedTime<brain.StillUntil then return false,"Combat recovery" end
     local char=body(LocalPlayer)
-    if not char or char:GetAttribute("canDash")==false or char:GetAttribute("busy")==true or char:GetAttribute("canRun")==false then return false,"Dash locked by game state" end
+    if not char or char:GetAttribute("LOCKED_INPUTS")==true or char:GetAttribute("cutsceneLock")==true or char:GetAttribute("canDash")==false or char:GetAttribute("busy")==true or char:GetAttribute("canRun")==false then return false,"Dash locked by game state" end
     local item=find(dashNames)
     if not item then return false,"Dash control not detected" end
     local b=item.Button
@@ -902,8 +901,8 @@ local function defensiveDash(hum,root,direction)
     end
     local ok,reason=fire(item);brain.DashRetry=elapsedTime+0.4
     if not ok then return false,reason or "Dash input rejected" end
-    brain.DashAt=elapsedTime;brain.NextAt=elapsedTime+numberAttribute(b,"RecoveryTime",0.3,0.1,2)
-    brain.StillUntil=brain.NextAt
+    brain.DashAt=elapsedTime;brain.NextAt=math.max(brain.NextAt,elapsedTime+numberAttribute(b,"RecoveryTime",0.3,0.1,2))
+    brain.StillUntil=math.max(brain.StillUntil,brain.NextAt)
     return true,"Native dash input requested (acceptance unverified)"
 end
 local function trackMovement(hum,root,distance,dt)
@@ -1045,6 +1044,9 @@ function API.Step(dt)
 		if API.Target~=target then return end
 	end
 	if char:GetAttribute("canRun")==false and distance>8 then status("Game has movement locked (canRun=false)"); return end
+    if API.Instinct and API.Instinct.ThreatPending then
+        brain.StableAim=0;status("Defense priority: holding new attacks");return
+    end
 	local item=chooseSkill(distance); brain.AimSkill=item
 	local point=aimPoint(targetRoot)
 	local vector=point-camera.CFrame.Position
@@ -1249,13 +1251,14 @@ local MakeInstinct=(function()
 -- Short native-movement defense. No teleport, custom velocity or cooldown bypass. Optional short WalkSpeed bursts restore owned changes.
 return function(ctx)
     local Players=game:GetService("Players")
-    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,SpeedBursts=0,LastSpeedResult="No burst",LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
+    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,SpeedBursts=0,LastSpeedResult="No burst",BurstRejected=false,ThreatPending=false,LocalBlockReason="None",LastAutoDash="Not attempted",LastTestDash="Not attempted",LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
     local records,tracked,pending={},{ },{}
     local clock,age,retry,holdUntil=0,0,0,0
     local enabled,dead=false,false
     local addedConnection
     local trace,recordUntil,probe={},0,nil
     local motion
+    local burstBlockedRoot
     local blocks={}
     local function log(message)
         if #trace>=100 then table.remove(trace,1) end
@@ -1292,7 +1295,9 @@ return function(ctx)
             "Attack cues: "..M.Cues.." | animations seen: "..M.Animations.." | hitboxes tracked: "..M.TrackedHitboxes,
             "Clearance attempts: "..M.Attempts.." | move requests: "..M.Reactions.." (automatic="..M.AutomaticMoves..", manual tests="..M.TestMoves..")",
             "Last automatic decision: "..M.LastDecision,
-            "Speed bursts: "..M.SpeedBursts.." | requested speed="..ctx.Config.InstinctBurstSpeed.." | "..M.LastSpeedResult,
+            "Character movement gate: "..M.LocalBlockReason,
+            "Last automatic dash: "..M.LastAutoDash.." | last dash test: "..M.LastTestDash,
+            "Speed bursts: "..M.SpeedBursts.." | configured speed="..ctx.Config.InstinctBurstSpeed.." | last requested="..tostring(M.LastBurstSpeed).." | "..M.LastSpeedResult,
             "Movement requests: native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
             "Movement observation: "..M.Motion.." | last observed travel="..tostring(M.LastObservedTravel),
@@ -1303,7 +1308,7 @@ return function(ctx)
             table.insert(lines,"Since encounter recording started: automatic="..(M.AutomaticMoves-M.EncounterStart.Auto)..", tests="..(M.TestMoves-M.EncounterStart.Tests)..", cues="..(M.Cues-M.EncounterStart.Cues))
         end
         table.insert(lines,"Enabled: "..tostring(ctx.Config.UltraInstinct).." | cue range="..ctx.Config.InstinctRange.." | walking destination cap="..ctx.Config.InstinctMaxDistance)
-        local canRun,pause=ctx.CanRun();table.insert(lines,"Can run: "..tostring(canRun).." | "..tostring(pause))
+        local canRun,pause=ctx.CanRun();table.insert(lines,"Input/camera context ready: "..tostring(canRun).." | "..tostring(pause))
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         table.insert(lines,"Local body: "..(char and char:GetFullName() or "missing").." | anchored="..tostring(root and root.Anchored).." | PlatformStand="..tostring(hum and hum.PlatformStand))
         if char then table.insert(lines,"Local fields: "..snapshot(char)) end
@@ -1356,13 +1361,13 @@ return function(ctx)
         end
     end
     local function startBurst(active)
-        if not ctx.Config.FastSidestep then return end
+        if not ctx.Config.FastSidestep or burstBlockedRoot==active.Root then return end
         local original=active.Hum.WalkSpeed
         local requested=math.max(original,ctx.Config.InstinctBurstSpeed)
         if requested<=original then return end
         active.BaseSpeed=original;active.BoostSpeed=requested
         active.Hum.WalkSpeed=requested
-        M.SpeedBursts+=1;M.LastSpeedResult="Burst requested at speed "..requested
+        M.SpeedBursts+=1;M.LastBurstSpeed=requested;M.LastSpeedResult="Burst requested at speed "..requested
         local remaining=(active.Goal-active.Root.Position).Magnitude
         local window=math.min(remaining/requested+0.02,0.25)
         holdUntil=clock+window;active.WallUntil=os.clock()+window;M.LastAssistWindow=window
@@ -1376,9 +1381,16 @@ return function(ctx)
             M.Stop();M.Status="Your changed movement input took control";return
         end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute("canRun")==false then M.Stop();return end
+        if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute("canRun")==false or char:GetAttribute("LOCKED_INPUTS")==true or char:GetAttribute("cutsceneLock")==true then M.Stop();return end
         if motion.BoostSpeed and math.abs(hum.WalkSpeed-motion.BoostSpeed)>0.01 then
-            M.Stop();M.Status="Burst stopped: game changed speed";return
+            -- The live game rewrites WalkSpeed. Preserve its value and keep the legal sidestep alive.
+            burstBlockedRoot=root;M.BurstRejected=true;motion.BoostSpeed=nil;motion.BaseSpeed=nil;motion.PendingBoost=nil
+            M.LastSpeedResult="Game replaced burst speed with "..hum.WalkSpeed.."; using its movement speed"
+            log(M.LastSpeedResult)
+            local remaining=(motion.Goal-root.Position).Magnitude
+            local window=math.max(0,math.min(remaining/math.max(hum.WalkSpeed,1),motion.StartClock+0.5-clock))
+            holdUntil=clock+window;motion.WallUntil=math.min(os.clock()+window,motion.StartWall+0.5)
+            M.LastAssistWindow=window;M.LastMode="Sidestep at game-controlled speed";M.Status=M.LastMode
         end
         if motion.PendingBoost and clock>=motion.PendingBoost then
             motion.PendingBoost=nil
@@ -1471,7 +1483,7 @@ return function(ctx)
             remember(node)
             if M.Recording then
                 local _,_,root=ctx.Body(Players.LocalPlayer)
-                if root and (node.Position-root.Position).Magnitude<48 then
+                if root and norm(node.Name)~="footstepvfx" and (node.Position-root.Position).Magnitude<48 then
                     log("New part "..node:GetFullName().." size="..tostring(node.Size).." accepted="..tostring(classification(node)).." | "..snapshot(node))
                 end
             end
@@ -1485,14 +1497,15 @@ return function(ctx)
             if dead or not observing() then return end
             local animation=track.Animation
             M.Animations+=1
-            if M.Recording then log("Animation @"..plr.Name.." "..track.Name.." id="..tostring(animation and animation.AnimationId).." priority="..tostring(track.Priority).." | "..snapshot(char)) end
-            local name=norm(track.Name)..norm(animation and animation.Name)
+                        local name=norm(track.Name)..norm(animation and animation.Name)
             local locomotion=name:find("idle",1,true) or name:find("walk",1,true) or name:find("run",1,true) or name:find("jump",1,true) or name:find("fall",1,true)
             if locomotion then return end
             local attacking=track:GetAttribute("IsAttack")==true or animation and animation:GetAttribute("IsAttack")==true
             for _,word in ipairs({"punch","swing","attack","windup","repulsor","unibeam","geyser","waterbreath","tentaclesmack","ability","cast","charge"}) do
                 if name:find(word,1,true) then attacking=true;break end
             end
+            local action=track.Priority==Enum.AnimationPriority.Action or track.Priority==Enum.AnimationPriority.Action2 or track.Priority==Enum.AnimationPriority.Action3 or track.Priority==Enum.AnimationPriority.Action4
+            if M.Recording and (attacking or action) then log("Animation @"..plr.Name.." "..track.Name.." id="..tostring(animation and animation.AnimationId).." priority="..tostring(track.Priority).." | "..snapshot(char)) end
             if attacking then cue(record,"Attack animation",not name:find("punch",1,true) and not name:find("swing",1,true))
             elseif track.Priority==Enum.AnimationPriority.Action or track.Priority==Enum.AnimationPriority.Action2 or track.Priority==Enum.AnimationPriority.Action3 or track.Priority==Enum.AnimationPriority.Action4 then
                 record.ActionAt=clock
@@ -1550,10 +1563,17 @@ return function(ctx)
         fields()
         return record
     end
-    local function eligible(char,hum,root)
-        return root and not root.Anchored and not hum.PlatformStand and char:GetAttribute("inArena")~=false
-            and char:GetAttribute("MorphAppearanceReady")~=false and char:GetAttribute("cutsceneLock")~=true and char:GetAttribute("canRun")~=false
+    local function movementBlock(char,hum,root)
+        if not root or not char or not hum then return "Character not ready" end
+        if char:GetAttribute("LOCKED_INPUTS")==true then return "Game locked inputs (LOCKED_INPUTS=true)" end
+        if char:GetAttribute("cutsceneLock")==true then return "Game cutscene/ability lock (cutsceneLock=true)" end
+        if char:GetAttribute("canRun")==false then return "Game locked movement (canRun=false)" end
+        if root.Anchored then return "Root is anchored" end
+        if hum.PlatformStand then return "Character is in PlatformStand" end
+        if char:GetAttribute("inArena")==false then return "Outside arena" end
+        if char:GetAttribute("MorphAppearanceReady")==false then return "Hero not ready" end
     end
+    local function eligible(char,hum,root) return movementBlock(char,hum,root)==nil end
     local function geometry(part,root)
         local ok,value=pcall(function()
             local cf=part.CFrame;local size=part.Size
@@ -1600,7 +1620,7 @@ return function(ctx)
         end
         M.TrackedHitboxes=count;return boxes,overlapping
     end
-    local function execute(root,goal,mode,reason,manual,boxes)
+    local function execute(root,goal,mode,reason,manual,boxes,nativeOnly)
         local offset=Vector3.new(goal.X-root.Position.X,0,goal.Z-root.Position.Z);local distance=offset.Magnitude
         if distance<0.2 or distance>ctx.Config.InstinctMaxDistance+0.001 then return false end
         local char,hum,current=ctx.Body(Players.LocalPlayer)
@@ -1611,19 +1631,23 @@ return function(ctx)
         local direction=offset.Unit
         local moving=ctx.ManualMovement()
         local window=math.min(distance/speed,0.5)
-        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,InitialSpeed=speed,MovingAssist=moving,Intent=ctx.MovementIntent(),WallUntil=os.clock()+window}
+        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,InitialSpeed=speed,StartClock=clock,StartWall=os.clock(),MovingAssist=moving,Intent=ctx.MovementIntent(),WallUntil=os.clock()+window}
         M.LastAssistWindow=window
         M.Dodging=true
         -- Set a normal walking direction before requesting the game's dash input.
         hum:Move(direction,false)
         local native,dashReason=false,"Manual test: walking only"
-        if not manual then native,dashReason=ctx.NativeDash(hum,root,direction) end
+        if not manual or nativeOnly then native,dashReason=ctx.NativeDash(hum,root,direction) end
         M.LastDash=dashReason or (native and "Dash input requested" or "Dash unavailable")
+        if nativeOnly then
+            M.LastTestDash=M.LastDash
+            if not native then M.Stop();M.Status="Dash test: "..M.LastDash;return false,M.LastDash end
+        elseif not manual then M.LastAutoDash=M.LastDash end
         if native then
-            M.NativeDashes+=1;mode="Native dash requested"
+            M.NativeDashes+=1;mode=nativeOnly and "Native dash test requested" or "Native dash requested"
             -- Keep a brief normal walking input too: requesting input does not prove the game accepted a dash.
             holdUntil=clock+window
-            if ctx.Config.FastSidestep then motion.PendingBoost=clock+0.08 end
+            if ctx.Config.FastSidestep and not nativeOnly then motion.PendingBoost=clock+0.08 end
         else
             if not manual then M.Sidesteps+=1 end
             mode=manual and "Test sidestep (normal speed)" or "Walking sidestep · "..M.LastDash
@@ -1640,15 +1664,15 @@ return function(ctx)
         retry=clock+0.45;M.Status=mode
         return true
     end
-    function M.TestDodge()
+    function M.TestDodge(nativeOnly)
         if dead or not ctx.CanRun() then return false,"Paused: close typing or dragging first" end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        if not eligible(char,hum,root) then M.LastBlock="Character cannot move";return false,M.LastBlock end
+        if not eligible(char,hum,root) then M.LastBlock=movementBlock(char,hum,root) or "Character cannot move";return false,M.LastBlock end
         local boxes=nearby(root)
         for i=0,7 do
-            local angle=i*math.pi/4;local goal=root.Position+Vector3.new(math.cos(angle),0,math.sin(angle))*math.min(4,ctx.Config.InstinctMaxDistance)
+            local angle=i*math.pi/4;local goal=root.Position+Vector3.new(math.cos(angle),0,math.sin(angle))*math.min(nativeOnly and 9 or 4,ctx.Config.InstinctMaxDistance)
             local outside=true;for _,box in ipairs(boxes) do if inside(box,goal) then outside=false;break end end
-            if outside and safe(root,goal,nil,boxes) then return execute(root,goal,"Manual test (not attack detection)","Test dodge button",true,boxes) end
+            if outside and safe(root,goal,nil,boxes) then return execute(root,goal,"Manual test (not attack detection)","Test dodge button",true,boxes,nativeOnly) end
         end
         M.Status="Test blocked: "..M.LastBlock;log(M.Status);return false,M.LastBlock
     end
@@ -1660,7 +1684,7 @@ return function(ctx)
         local progress=(probe.Root.Position-probe.Start):Dot(probe.Direction)
         M.LastObservedTravel=math.max(0,progress)
         if not probe.Checked and elapsed>=0.12 then
-            probe.Checked=true;probe.Moved=progress>probe.Distance*0.35
+            probe.Checked=true;probe.Moved=progress>math.min(0.5,probe.Distance*0.35)
             M.Motion=probe.Moved and "Local displacement observed; server acceptance unverified" or "No walking progress observed (blocked, movement lock or correction)"
             log(M.Motion.." progress="..string.format("%.2f",progress))
         end
@@ -1673,7 +1697,7 @@ return function(ctx)
     end
     function M.Step(dt)
         if dead then return end
-        clock+=dt;age+=dt;observeMove()
+        clock+=dt;age+=dt;observeMove();M.ThreatPending=false
         if M.Recording and clock>=recordUntil then M.Recording=false;log("Encounter recording complete; copy dodge report") end
         if not observing() then
             if motion then M.Steer(dt);if motion then return end end
@@ -1690,8 +1714,10 @@ return function(ctx)
         local canRun,pause=ctx.CanRun()
         if not canRun then M.Stop();M.Status="Paused: "..(pause or "input or camera");return end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        if not eligible(char,hum,root) then M.Stop();M.Status="Waiting for movable character";return end
-        if motion then M.Steer(dt);if motion then return end end
+        local blocked=movementBlock(char,hum,root)
+        M.LocalBlockReason=blocked or "None";M.BurstRejected=burstBlockedRoot~=nil and burstBlockedRoot==root
+        if not root then M.Stop();M.Status=blocked or "Character not ready";return end
+        if motion and not blocked then M.Steer(dt);if motion then return end end
         if age<0.025 then return end;age=0
         -- Parenting can precede names/attributes; give new parts a short metadata window.
         for part,at in pairs(pending) do
@@ -1705,6 +1731,12 @@ return function(ctx)
                 if otherRoot and (otherRoot.Position-root.Position).Magnitude<64 then watch(plr,otherChar,otherHum) else remove(plr) end
             else remove(plr) end
         end
+        if blocked then
+            M.Stop();M.Status=blocked
+            if M.LastLoggedBlock~=blocked then log(blocked);M.LastLoggedBlock=blocked end
+            return
+        end
+        M.LastLoggedBlock=nil
         if not ctx.Config.UltraInstinct then M.Status="Recording only · no automatic movement";return end
         local boxes,overlapping=nearby(root)
         if #overlapping>0 and clock>=retry then
@@ -1755,6 +1787,7 @@ return function(ctx)
             else remove(plr) end
         end
         local stale={};for plr in pairs(records) do if plr.Parent~=Players then table.insert(stale,plr) end end;for _,plr in ipairs(stale) do remove(plr) end
+        M.ThreatPending=bestRoot~=nil
         if not bestRoot or clock<retry or #overlapping>0 then
             if bestRecord and clock<retry then decision(bestRecord,"Waiting for short movement cooldown") end
             if not M.Dodging then M.Status="Watching nearby attacks" end
@@ -1850,7 +1883,7 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.7",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 5.8",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
@@ -1927,15 +1960,18 @@ return function(ctx)
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
-    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready. Fast sidestep adds a brief local speed burst and restores your previous speed. Changing joystick direction cancels it. The game may correct the burst.")
+    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready. Fast sidestep adds a brief local speed burst and restores your previous speed. Changing joystick direction cancels it. If the game replaces burst speed, it continues at game-controlled speed. Locked abilities/cutscenes prevent movement.")
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
     toggle(defense,"FastSidestep","Fast sidestep")
     slider(defense,"InstinctBurstSpeed","Burst speed",24,96)
     slider(defense,"InstinctRange","Nearby attack range",6,24)
     slider(defense,"InstinctMaxDistance","Sidestep limit",4,12)
-    local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,48));instinct.TextWrapped=true
+    local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,60));instinct.TextWrapped=true
     button(defense,"TestDodge","Test sidestep",function()
         local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Sidestep requested · see report" or (reason or "Test blocked")
+    end)
+    button(defense,"TestNativeDash","Test game dash",function()
+        local ok,reason=API.Instinct.TestDodge(true);footer.Text=ok and "Native dash input requested · see report" or (reason or "Dash unavailable")
     end)
     button(defense,"RecordDodge","Record nearby attacks · 10 sec",function()
         API.Instinct.RecordEncounter();footer.Text="Recording nearby attacks for 10 seconds"
@@ -2010,7 +2046,7 @@ return function(ctx)
         for _,paint in ipairs(paints) do paint() end
         play.Text=API.Enabled and "STOP" or "PLAY"
         play.BackgroundColor3=API.Enabled and Color3.fromRGB(99,52,70) or C.Accent;play.TextColor3=API.Enabled and C.Text or C.Base
-        status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.AutomaticMoves.." automatic · "..API.Instinct.TestMoves.." tests"..(API.Instinct.Recording and " · RECORDING" or "")
+        status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.AutomaticMoves.." automatic · "..API.Instinct.TestMoves.." tests"..(API.Instinct.Recording and " · RECORDING" or "")..(API.Instinct.BurstRejected and " · boost overridden by game" or "")
     end
     function M.Destroy()
         if dead then return end;dead=true;sliderDrag=nil;drag=nil

@@ -281,7 +281,7 @@ local function findName(root,name)
 	for _,child in ipairs(root:GetChildren()) do local result=findName(child,name); if result then return result end end
 end
 local api=boot()
-check(api.Version=="5.7" and not api.Enabled,"auto play should start off")
+check(api.Version=="5.8" and not api.Enabled,"auto play should start off")
 local play=findName(api.Gui,"Play")
 check(play and play.Text=="PLAY","one Play button missing")
 check(findName(api.Gui,"Tab_combat") and findName(api.Gui,"Tab_visuals") and findName(api.Gui,"Tab_settings"),"full interface tabs missing")
@@ -872,7 +872,7 @@ local function interfaceVisualInstinctChecks()
         local untouched=true
         for _=1,count do
             local before=root.CFrame;api.Step(0.05);renderAim(0.05)
-            untouched=untouched and root.CFrame==before
+            untouched=untouched and (root.CFrame==before or api.Enabled and (root.CFrame.Position-before.Position).Magnitude<0.001)
             if physics~=false and api.Instinct.Dodging and hum.LastMove then
                 place(root.Position+hum.LastMove*hum.WalkSpeed*0.05)
             end
@@ -1025,7 +1025,11 @@ local function interfaceVisualInstinctChecks()
     check(api.Instinct.LastAssistWindow<=0.25 and api.Instinct.SpeedBursts>0,"speed burst was not short and observable")
     stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",203);stepDefense(1)
     hum.WalkSpeed=20;stepDefense(1)
-    check(hum.WalkSpeed==20 and not api.Instinct.Dodging,"restoration overwrote a speed change made by the game")
+    check(hum.WalkSpeed==20 and api.Instinct.Dodging,"game speed replacement cancelled the entire sidestep or was overwritten")
+    local rejectedBursts=api.Instinct.SpeedBursts
+    stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",203.5);stepDefense(1)
+    check(hum.WalkSpeed==20 and api.Instinct.SpeedBursts==rejectedBursts,"controller retried a rejected speed burst on the same character")
+    stepDefense(12);api.Unload();api=boot();api.SetOption("UltraInstinct",true)
     hum.WalkSpeed=16;stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",204);stepDefense(1)
     moveVector=Vector3.new(1,0,0);stepDefense(1)
     check(hum.WalkSpeed==16 and not api.Instinct.Dodging and hum.LastMove==moveVector,"manual override left the speed boost active")
@@ -1055,8 +1059,55 @@ local function interfaceVisualInstinctChecks()
     stepDefense(5);check(hum.WalkSpeed==16,"delayed speed boost did not restore its original value")
     stepDefense(60);place(Vector3.new());ownNativeSpeed=true;enemyChar:SetAttribute("lastSwing",210);stepDefense(4)
     check(hum.WalkSpeed==40 and api.Instinct.SpeedBursts==1,"fast fallback overwrote a speed set by the native dash")
-    api.SetOption("UltraInstinct",false);hum.WalkSpeed=16;dashProbe:Destroy()
-    scripts:Destroy();enemyChar:SetAttribute("castLocked",nil)
+    api.SetOption("UltraInstinct",false);hum.WalkSpeed=16;ownNativeSpeed=false
+    -- Live gate replay: movement/skill locks are explicit, observed, and never forcibly cleared.
+    api.Instinct.RecordEncounter();ch:SetAttribute("LOCKED_INPUTS",true);ch:SetAttribute("cutsceneLock",true);ch:SetAttribute("canRun",false)
+    api.SetOption("UltraInstinct",true);local requestsBefore=api.Instinct.Reactions
+    enemyChar:SetAttribute("lastSwing",211);stepDefense(2)
+    check(api.Instinct.LocalBlockReason:find("LOCKED_INPUTS",1,true) and api.Instinct.Reactions==requestsBefore,"live input lock did not block steering with an explicit reason")
+    check(ch:GetAttribute("LOCKED_INPUTS")==true and ch:GetAttribute("cutsceneLock")==true,"defense rewrote the game's ability/input locks")
+    ch:SetAttribute("LOCKED_INPUTS",false);stepDefense(1)
+    check(api.Instinct.LocalBlockReason:find("cutsceneLock",1,true),"cutscene lock was hidden behind a generic character status")
+    ch:SetAttribute("cutsceneLock",false);stepDefense(1)
+    check(api.Instinct.LocalBlockReason:find("canRun",1,true),"native movement lock was not identified")
+    -- New nearby players still acquire watchers while our own movement is locked.
+    local lateEnemy=player("LateEnemy",99);local lateChar=character(lateEnemy);lateChar.PrimaryPart.Position=Vector3.new(6,0,0)
+    lateChar:SetAttribute("state","casting");local cuesBefore=api.Instinct.Cues;stepDefense(1)
+    check(api.Instinct.Cues>cuesBefore and api.Instinct.Reactions==requestsBefore,"character locks prevented observation or allowed movement")
+    local track=node("AnimationTrack","Animation");local anim=node("Animation","Animation");anim.AnimationId="rbxassetid://123456789";track.Animation=anim;track.Priority=Enum.AnimationPriority.Action4
+    local lateAnimator=lateChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator")
+    lateAnimator.AnimationPlayed:Fire(track)
+    track.Priority=Enum.AnimationPriority.Movement
+    for _=1,150 do lateAnimator.AnimationPlayed:Fire(track) end
+    check(api.Instinct.Diagnostics():find("123456789",1,true),"locomotion animation spam erased the relevant encounter trace")
+    lateEnemy:Destroy();lateChar:Destroy();track:Destroy();anim:Destroy()
+    ch:SetAttribute("canRun",true);api.SetOption("UltraInstinct",false);stepDefense(70)
+    -- A planner recovery delay is not a game movement lock. Test native input directly with bursts disabled.
+    api.Brain.NextAt=1e9;api.Brain.StillUntil=1e9
+    local burstCount=api.Instinct.SpeedBursts;local nativeCount=api.Instinct.NativeDashes
+    findName(api.Gui,"TestNativeDash").Activated:Fire()
+    check(api.Instinct.NativeDashes==nativeCount+1 and api.Instinct.LastTestDash:find("requested",1,true),"defensive dash was blocked by Auto Farm's planner recovery timer")
+    stepDefense(14)
+    check(api.Instinct.SpeedBursts==burstCount,"native-only dash test silently substituted a speed burst")
+    nativeButton:SetAttribute("OnCooldown",true);findName(api.Gui,"TestNativeDash").Activated:Fire()
+    check(api.Instinct.LastTestDash=="Dash cooldown active" and api.Instinct.NativeDashes==nativeCount+1,"native dash test bypassed the real exposed cooldown")
+    api.Brain.NextAt=0;api.Brain.StillUntil=0
+    -- Last automatic failure must survive manual tests in the report.
+    api.SetOption("UltraInstinct",true);stepDefense(1);place(Vector3.new());enemyChar:SetAttribute("lastSwing",212);stepDefense(1)
+    local autoReason=api.Instinct.LastAutoDash
+    api.SetOption("UltraInstinct",false);api.Instinct.TestDodge()
+    check(api.Instinct.LastAutoDash==autoReason and autoReason~="Not attempted","sidestep tests erased the automatic dash failure reason")
+    stepDefense(14)
+    api.SetOption("FastSidestep",false)
+    local punch=node("TextButton","AttackButton",dashProbe);local attackCalls=0
+    punch.Activated:Connect(function() attackCalls+=1 end)
+    api.RefreshControls();api.SetOption("UltraInstinct",true);api.SetEnabled(true);stepDefense(20)
+    ground=false;api.Brain.NextAt=0;api.Brain.StillUntil=0
+    local beforeThreat=attackCalls;enemyChar:SetAttribute("lastSwing",213);stepDefense(2)
+    check(api.Instinct.ThreatPending and attackCalls==beforeThreat,"Auto Farm started an attack instead of yielding to a pending nearby threat")
+    ground=true;api.SetEnabled(false);api.SetOption("UltraInstinct",false)
+    dashProbe:Destroy();scripts:Destroy();enemyChar:SetAttribute("castLocked",nil)
+    ch:SetAttribute("LOCKED_INPUTS",nil);ch:SetAttribute("cutsceneLock",nil);ch:SetAttribute("canRun",nil)
     enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("MorphCurrent",nil);enemyChar:SetAttribute("power",nil)
     local handle=findName(api.Gui,"Handle")
     local touch={UserInputType=Enum.UserInputType.Touch,Position=Vector3.new(100,100,0)}
