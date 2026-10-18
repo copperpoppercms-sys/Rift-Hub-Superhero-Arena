@@ -265,15 +265,14 @@ local function findName(root,name)
 	for _,child in ipairs(root:GetChildren()) do local result=findName(child,name); if result then return result end end
 end
 local api=boot()
-check(api.Version=="4.6" and not api.Enabled,"auto play should start off")
+check(api.Version=="5.0" and not api.Enabled,"auto play should start off")
 local play=findName(api.Gui,"Play")
 check(play and play.Text=="PLAY","one Play button missing")
-local buttons=0
-for _,item in ipairs(api.Gui:GetDescendants()) do
-	if item:IsA("GuiButton") then buttons+=1 end
-	check(not item:IsA("ScrollingFrame"),"tabs or scrolling panels remain")
-end
-check(buttons==2,"UI should contain only Play and close")
+check(findName(api.Gui,"Tab_combat") and findName(api.Gui,"Tab_visuals") and findName(api.Gui,"Tab_settings"),"full interface tabs missing")
+check(findName(api.Gui,"Page_combat").Visible and not findName(api.Gui,"Page_visuals").Visible,"wrong initial tab")
+findName(api.Gui,"Tab_visuals").Activated:Fire()
+check(findName(api.Gui,"Page_visuals").Visible and not findName(api.Gui,"Page_combat").Visible,"tab switching failed")
+findName(api.Gui,"Tab_combat").Activated:Fire()
 local own=localPlayer.Character; local hum=own:FindFirstChildOfClass("Humanoid"); local root=own:FindFirstChild("HumanoidRootPart")
 local target=other.Character; local enemyHum=target:FindFirstChildOfClass("Humanoid"); local enemyRoot=target:FindFirstChild("HumanoidRootPart")
 enemyRoot.Position=Vector3.new(5,0,0)
@@ -790,6 +789,101 @@ local function groupAndMovementChecks()
 end
 groupAndMovementChecks()
 
+local function interfaceVisualInstinctChecks()
+    api.Unload();hud:Destroy();wall=false;ground=true;nativeActions={}
+    local ch=localPlayer.Character;local hum=ch:FindFirstChildOfClass("Humanoid");local root=ch.PrimaryPart
+    local enemyChar=other.Character;local enemy=enemyChar.PrimaryPart
+    hum.Health=100;hum.PlatformStand=false;root.Anchored=false
+    for _,key in ipairs({"busy","canRun","inArena","cutsceneLock"}) do ch:SetAttribute(key,nil) end
+    root.Position=Vector3.new();root.CFrame=CFrame.lookAt(root.Position,root.Position+Vector3.new(1,0,0))
+    enemy.Position=Vector3.new(8,0,0);enemy.CFrame=CFrame.lookAt(enemy.Position,root.Position)
+    enemyChar:FindFirstChildOfClass("Humanoid").Health=100;enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("lastSwing",100)
+    api=boot()
+    for id,name in pairs({Water="Aquaman",Earth="Hulk",Knight="Thor",Samurai="Deadpool",Nature="Groot"}) do
+        enemyChar:SetAttribute("MorphCurrent",id);enemyChar:SetAttribute("power","Spiderman");api.Visuals.Step(0.2)
+        local hero,kind=api.ResolveHero(other);check(hero==name and kind=="confirmed","confirmed role alias failed: "..id)
+    end
+    local row=api.Visuals.Rows[other]
+    check(row and #row.Tag:GetChildren()==2,"ESP contains overlays beyond role and username")
+    check(row.Role.Position.Y.Offset<row.Username.Position.Y.Offset and row.Username.Text=="@Other","role is not above the exact username")
+    api.SetOption("Roles",false);check(not row.Role.Visible and row.Username.Visible and row.Highlight.Enabled,"role toggle changed chams or username")
+    api.SetOption("Names",false);check(not row.Tag.Enabled and row.Highlight.Enabled,"label toggles disabled chams")
+    api.SetOption("Roles",true);api.SetOption("Names",true);api.SetOption("Chams",false)
+    check(not row.Highlight.Enabled and row.Tag.Enabled,"chams toggle changed nameplate")
+    api.SetOption("Chams",true);api.SetOption("ChamOpacity",0.8);check(math.abs(row.Highlight.FillTransparency-0.2)<0.0001,"cham opacity ignored")
+    enemyChar:SetAttribute("MorphCurrent","Wind");local hero,kind=api.ResolveHero(other)
+    check(hero=="Storm" and kind=="estimate","estimated aliases are not identified as estimates")
+    api.SetOption("GuessRoles",false);hero,kind=api.ResolveHero(other)
+    check(hero=="Wind" and kind=="unmapped","disabling guesses did not preserve raw role ID")
+    local menu=node("Frame","HeroMenuCard",localPlayer:FindFirstChild("PlayerGui"));menu:SetAttribute("MorphCurrent","Angel")
+    node("TextLabel","HeroName",menu).Text="Superman";api.Visuals.LearnMenu();enemyChar:SetAttribute("MorphCurrent","Angel")
+    hero,kind=api.ResolveHero(other);check(hero=="Superman" and kind=="confirmed","explicit menu mapping was ignored")
+    node("TextLabel","OtherHero",menu).Text="Thor";api.Visuals.LearnMenu();hero,kind=api.ResolveHero(other)
+    check(hero=="Angel" and kind=="unmapped","ambiguous menu invented an alias")
+    menu:Destroy();api.Visuals.LearnMenu()
+    api.SetOption("ESP",false);check(not enemyChar:FindFirstChild("RiftSHA_Tag") and not enemyChar:FindFirstChild("RiftSHA_Highlight"),"ESP off left instances")
+    api.SetOption("ESP",true);check(api.Visuals.Rows[other],"ESP re-enable failed")
+    check(api.Diagnostics():find("Hero roles (current replicated fields):",1,true),"diagnostics omit role sources")
+    check(not api.SetOption("ChamOpacity",0/0) and not api.SetOption("UltraInstinct",1),"invalid settings accepted")
+    camera.ViewportSize=Vector2.new(390,844);api.UI.Step()
+    check(api.UI.Window.Size.X.Offset==370 and api.UI.Window:FindFirstChildOfClass("UIScale").Scale==1,"phone layout shrank or overflowed")
+    camera.ViewportSize=Vector2.new(844,390);api.UI.Step();check(api.UI.Window.Size.Y.Offset==358,"landscape layout overflowed")
+    findName(api.Gui,"Minimize").Activated:Fire();check(not api.UI.Window.Visible and findName(api.Gui,"Restore").Visible,"minimize failed")
+    findName(api.Gui,"Restore").Activated:Fire();check(api.UI.Window.Visible,"mobile logo did not reopen the hub")
+    camera.ViewportSize=Vector2.new(1280,720);api.UI.Step()
+    hud=node("ScreenGui","HUD_Mobile",localPlayer:FindFirstChild("PlayerGui"))
+    local dash=node("TextButton","DashButton",hud);dash.Text="Dash";dash:SetAttribute("CooldownDuration",3)
+    local dashes=0;dash.Activated:Connect(function() dashes+=1 end)
+    api.SetOption("InstinctDash",false);api.SetOption("UltraInstinct",true)
+    api.Step(0.1);enemyChar:SetAttribute("lastSwing",101);api.Step(0.1);renderAim(0.1)
+    check(api.Instinct.Reactions==1 and hum.LastMove.Magnitude>0.5 and not api.Enabled,"independent Ultra Instinct did not move while farm was off")
+    check(root.CFrame.Position.Magnitude==0 and dashes==0,"sidestep teleported or requested disabled dash")
+    for _=1,12 do api.Step(0.1);renderAim(0.1) end
+    check(api.Instinct.Reactions==1,"unchanged attack repeatedly triggered defense")
+    api.SetOption("InstinctDash",true);enemyChar:SetAttribute("lastSwing",102);api.Step(0.1)
+    check(api.Instinct.Reactions==2 and dashes==1,"available native dash was not requested")
+    for _=1,8 do api.Step(0.1);renderAim(0.1) end
+    dash:SetAttribute("OnCooldown",true);enemyChar:SetAttribute("lastSwing",103);api.Step(0.1)
+    check(api.Instinct.Reactions==3 and dashes==1,"Ultra Instinct bypassed native dash cooldown")
+    api.SetOption("UltraInstinct",false);check(not api.Instinct.Dodging and hum.LastMove.Magnitude==0,"defense off left movement active")
+    api.SetOption("UltraInstinct",true);api.Step(0.1)
+    local before=api.Instinct.Reactions
+    enemy.CFrame=CFrame.lookAt(enemy.Position,enemy.Position+Vector3.new(1,0,0));enemyChar:SetAttribute("lastSwing",104);api.Step(0.1)
+    check(api.Instinct.Reactions==before,"opponent facing away caused an evade")
+    enemy.CFrame=CFrame.lookAt(enemy.Position,root.Position);wall=true;enemyChar:SetAttribute("lastSwing",105);api.Step(0.1)
+    check(api.Instinct.Reactions==before,"obstructed opponent caused an evade")
+    wall=false;ground=false;enemyChar:SetAttribute("lastSwing",106);api.Step(0.1)
+    check(api.Instinct.Reactions==before,"defense selected unverified ground")
+    ground=true;focusedBox={};enemyChar:SetAttribute("lastSwing",107);api.Step(0.1);renderAim(0.1)
+    check(not api.Instinct.Dodging,"defense ran while typing");focusedBox=nil
+    api.SetOption("UltraInstinct",false);api.SetOption("UltraInstinct",true);api.Step(0.1)
+    local animator=enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator")
+    local idleTrack=node("AnimationTrack","Idle",nil);idleTrack.Animation=node("Animation","Idle",nil)
+    animator.AnimationPlayed:Fire(idleTrack);api.Step(0.1);check(not api.Instinct.Dodging,"idle animation caused an evade")
+    local attackTrack=node("AnimationTrack","RepulsorWindup",nil);attackTrack.Animation=node("Animation","RepulsorWindup",nil)
+    animator.AnimationPlayed:Fire(attackTrack);api.Step(0.1);renderAim(0.1)
+    check(api.Instinct.Dodging and api.Instinct.LastCue=="Attack animation","recognizable attack animation was ignored")
+    ch:SetAttribute("canRun",false);api.Step(0.1);renderAim(0.1)
+    check(not api.Instinct.Dodging,"movement lock did not cancel defense");ch:SetAttribute("canRun",nil)
+    api.SetOption("UltraInstinct",false);api.SetOption("InstinctDash",false)
+    enemy.Position=Vector3.new(30,0,0);enemy.CFrame=CFrame.lookAt(enemy.Position,root.Position)
+    api.SetOption("UltraInstinct",true);api.Step(0.1)
+    before=api.Instinct.Reactions;enemyChar:SetAttribute("lastSwing",108);api.Step(0.1)
+    check(api.Instinct.Reactions==before,"out-of-reach melee triggered a dodge")
+    enemyChar:SetAttribute("CastStartedAt",10);api.Step(0.1)
+    check(api.Instinct.Reactions==before+1,"ranged ability windup was not detected inside configured range")
+    api.SetOption("UltraInstinct",false);enemyChar:SetAttribute("CastStartedAt",nil);enemy.Position=Vector3.new(8,0,0)
+    local handle=findName(api.Gui,"Handle")
+    local touch={UserInputType=Enum.UserInputType.Touch,Position=Vector3.new(100,100,0)}
+    handle.InputBegan:Fire(touch);touch.Position=Vector3.new(9999,-9999,0);input.InputChanged:Fire(touch);input.InputEnded:Fire(touch)
+    local panel=api.UI.Window
+    check(panel.Position.X.Offset+panel.Size.X.Offset/2<=camera.ViewportSize.X-8 and panel.Position.Y.Offset-panel.Size.Y.Offset/2>=8,"drag allowed UI outside viewport")
+    for _,item in ipairs({idleTrack,idleTrack.Animation,attackTrack,attackTrack.Animation}) do item:Destroy() end
+    enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("MorphCurrent",nil);enemyChar:SetAttribute("power",nil)
+    flushSpawn();flush()
+end
+interfaceVisualInstinctChecks()
+
 -- Unload during a pending route; all owned controls and callbacks disappear.
 wall=true; api.SetEnabled(true); tick(1)
 local oldGui=api.Gui; api=boot(); flushSpawn(); flush()
@@ -797,7 +891,12 @@ check(oldGui.Parent==nil and env.SuperheroArenaHub==api and not api.Enabled,"re-
 api.Unload(); api.Unload(); hud:Destroy(); flushSpawn(); flush()
 check(api.Gui.Parent==nil and env.SuperheroArenaHub==nil,"unload not idempotent")
 check(next(renderBindings)==nil,"camera render binding leaked")
+-- Failed UI construction also tears down controls connected before the failure.
+local savedNew=Instance.new
+Instance.new=function(class) if class=="ScrollingFrame" then error("simulated UI setup failure") end;return savedNew(class) end
+local built,buildError=pcall(boot);Instance.new=savedNew
+check(not built and tostring(buildError):find("startup",1,true) and not coreGui:FindFirstChild("RiftAutoPlay"),"partial UI startup did not clean its window")
 local leaks=0
 for _,sig in ipairs(allSignals) do for _,c in ipairs(sig.handlers) do if c.Connected then leaks+=1 end end end
 check(leaks==0,"unload leaked "..leaks.." signal handlers")
-print("PASS: "..checks.." checks covering one-button UI, combo sequencing, cast/channel timing, native dash, aim, movement, pauses and cleanup.")
+print("PASS: "..checks.." checks covering animated UI, combo sequencing, cast/channel timing, native dash, aim, movement, pauses and cleanup.")
