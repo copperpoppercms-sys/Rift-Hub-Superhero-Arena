@@ -129,7 +129,12 @@ function instanceMethods:GetDescendants()
 	visit(self); return result
 end
 function instanceMethods:GetAttributes() return table.clone(rawget(self,"_attributes")) end
-function instanceMethods:SetAttribute(key,value) rawget(self,"_attributes")[key]=value end
+function instanceMethods:SetAttribute(key,value)
+    local values=rawget(self,"_attributes");local old=values[key];values[key]=value
+    local event=rawget(self,"_changes")["Attribute:"..key]
+    if old~=value and event then event:Fire() end
+end
+function instanceMethods:GetAttributeChangedSignal(key) return self:GetPropertyChangedSignal("Attribute:"..key) end
 function instanceMethods:GetAttribute(key) return rawget(self,"_attributes")[key] end
 function instanceMethods:FindFirstChild(name)
 	for _,child in ipairs(self:GetChildren()) do if child.Name==name then return child end end
@@ -258,7 +263,7 @@ local queryParts={}
 local destinationBlocked=false
 workspace.DescendantAdded=signal()
 function workspace:GetPartBoundsInRadius() return table.clone(queryParts) end
-function workspace:GetPartBoundsInBox() return destinationBlocked and {{CanCollide=true}} or {} end
+function workspace:GetPartBoundsInBox() return destinationBlocked and {{CanCollide=true,GetFullName=function() return "Workspace.TestWall" end}} or {} end
 local originalRequire=require
 local require=function(module)
     if type(module)=="table" and module.MockModule then return module.MockModule end
@@ -276,7 +281,7 @@ local function findName(root,name)
 	for _,child in ipairs(root:GetChildren()) do local result=findName(child,name); if result then return result end end
 end
 local api=boot()
-check(api.Version=="5.1" and not api.Enabled,"auto play should start off")
+check(api.Version=="5.2" and not api.Enabled,"auto play should start off")
 local play=findName(api.Gui,"Play")
 check(play and play.Text=="PLAY","one Play button missing")
 check(findName(api.Gui,"Tab_combat") and findName(api.Gui,"Tab_visuals") and findName(api.Gui,"Tab_settings"),"full interface tabs missing")
@@ -924,6 +929,56 @@ local function interfaceVisualInstinctChecks()
     wall=false;destinationBlocked=true;stepDefense(2);check(api.Instinct.Reactions==before,"escape ended in a solid part")
     destinationBlocked=false;focusedBox={};stepDefense(2);check(api.Instinct.Reactions==before,"escape ran while typing");focusedBox=nil
     api.SetOption("UltraInstinct",false);blocked:Destroy();queryParts={};effects:Destroy()
+    -- Regression: one stale attack source cannot hide another source, including nil -> first value.
+    place(Vector3.new());enemy.Position=Vector3.new(8,0,0)
+    enemyChar:SetAttribute("lastSwing",200);enemyChar:SetAttribute("m1Resolved",nil)
+    api.SetOption("UltraInstinct",true);stepDefense(1);before=api.Instinct.Reactions
+    enemyChar:SetAttribute("m1Resolved",201);stepDefense(1)
+    check(api.Instinct.Reactions==before+1 and api.Instinct.LastCue=="Melee field: m1Resolved","lastSwing masked m1Resolved or its first value")
+    stepDefense(8);place(Vector3.new());enemyChar:SetAttribute("lastSwing",202);stepDefense(1)
+    check(api.Instinct.Reactions==before+2,"independent lastSwing source stopped working")
+    stepDefense(8);place(Vector3.new());before=api.Instinct.Reactions
+    -- A short state that starts and ends before Heartbeat is retained by the attribute listener.
+    enemyChar:SetAttribute("state","casting");enemyChar:SetAttribute("state","neutral");stepDefense(1)
+    check(api.Instinct.Reactions==before+1,"short attack transition was lost between heartbeats")
+    stepDefense(8);place(Vector3.new());before=api.Instinct.Reactions
+    wall=true;enemyChar:SetAttribute("lastSwing",203);stepDefense(1)
+    check(api.Instinct.Reactions==before and api.Instinct.Diagnostics():find("Path blocked by",1,true),"blocked destinations lack actionable diagnostics")
+    wall=false;stepDefense(2)
+    check(api.Instinct.Reactions==before+1,"a blocked path prematurely consumed the attack cue")
+    api.SetOption("UltraInstinct",false);stepDefense(8);place(Vector3.new());before=api.Instinct.Reactions
+    findName(api.Gui,"RecordDodge").Activated:Fire();stepDefense(1)
+    enemyChar:SetAttribute("state","casting");enemyChar:SetAttribute("state","neutral")
+    local animation=node("Animation","Animation");animation.AnimationId="rbxassetid://123456"
+    local track=node("AnimationTrack","Unnamed");track.Animation=animation;track.Priority=Enum.AnimationPriority.Action
+    enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator").AnimationPlayed:Fire(track)
+    local observed=node("Part","UnfamiliarEffect",workspace);observed.Position=Vector3.new();observed.Size=Vector3.new(2,2,2)
+    workspace.DescendantAdded:Fire(observed);stepDefense(1)
+    local report=api.Instinct.Diagnostics()
+    check(api.Instinct.Reactions==before,"record-only mode made an automatic move")
+    check(report:find("123456",1,true) and report:find("UnfamiliarEffect",1,true) and report:find("state=casting",1,true),"encounter recorder lost unknown animation, part or transient fields")
+    stepDefense(101);check(not api.Instinct.Recording,"encounter recorder exceeded its time limit")
+    check(api.Instinct.Diagnostics():find("Encounter recording complete",1,true),"completed recording discarded events")
+    ground=false;local ok=api.Instinct.TestDodge()
+    check(not ok and api.Instinct.LastBlock=="No ground below destination","test bypassed ground clearance")
+    ground=true;destinationBlocked=true
+    ok=api.Instinct.TestDodge();check(not ok and api.Instinct.LastBlock:find("Destination",1,true),"blocked destination did not identify the solid part")
+    destinationBlocked=false
+    local oldBounds=workspace.GetPartBoundsInBox
+    workspace.GetPartBoundsInBox=function() error("simulated unsupported bounds query") end
+    ok=api.Instinct.TestDodge();check(not ok and api.Instinct.LastBlock:find("Destination query failed",1,true),"unsupported clearance query silently allowed a move")
+    workspace.GetPartBoundsInBox=oldBounds
+    place(Vector3.new());findName(api.Gui,"TestDodge").Activated:Fire()
+    check(api.Instinct.Reactions==before+1 and api.Instinct.LastDistance==4,"explicit test did not use the bounded shared move path")
+    root.Position=root.CFrame.Position;stepDefense(2)
+    check(api.Instinct.Motion:find("Local displacement observed",1,true),"move report did not observe actual local displacement")
+    place(Vector3.new());stepDefense(6)
+    check(api.Instinct.Motion:find("Returned near start",1,true),"return toward the origin was not reported")
+    place(Vector3.new());api.Instinct.TestDodge();place(Vector3.new());stepDefense(2)
+    check(api.Instinct.Motion:find("Move not retained",1,true),"a rejected position write was labelled as a confirmed dodge")
+    local copied=api.CopyDodgeReport()
+    check(copied:find("5.2",1,true) and copied:find("Ultra Instinct live report",1,true),"dedicated dodge copy report missing")
+    animation:Destroy();track:Destroy();observed:Destroy();api.SetOption("UltraInstinct",false)
     -- Auto Farm leaves ControlModule enabled and yields to keyboard/joystick input.
     local disabled=0;local moveVector=Vector3.new()
     local controls={controlsEnabled=true,Disable=function() disabled+=1 end,Enable=function() end,GetMoveVector=function() return moveVector end}

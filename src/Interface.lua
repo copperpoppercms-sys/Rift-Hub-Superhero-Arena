@@ -56,7 +56,7 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.1",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 5.2",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
@@ -124,6 +124,10 @@ return function(ctx)
             if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then sliderDrag={Input=input,Update=update};update(input.Position.X) end
         end)
     end
+    local function button(parent,name,title,fn)
+        local b=make("TextButton",{Name=name,Text=title,Size=UDim2.new(1,0,0,37),Font=Enum.Font.GothamBold,TextSize=12,
+            TextColor3=C.Text,BackgroundColor3=C.Raised,AutoButtonColor=false,BorderSizePixel=0},parent);round(b,8);hover(b);connect(b.Activated,fn)
+    end
     local farm=section(M.combat,"AUTO FARM","Automatically selects opponents, moves into position, and requests your hero’s available attacks and abilities.")
     local play=make("TextButton",{Name="Play",Size=UDim2.new(1,0,0,43),Text="PLAY",Font=Enum.Font.GothamBold,TextSize=13,
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
@@ -133,7 +137,16 @@ return function(ctx)
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
     slider(defense,"InstinctRange","Nearby attack range",6,24)
     slider(defense,"InstinctMaxDistance","Maximum dodge",4,12)
-    local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,30));instinct.TextWrapped=true
+    local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,48));instinct.TextWrapped=true
+    button(defense,"TestDodge","Test dodge · 4 studs",function()
+        local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Test requested · see dodge report" or (reason or "Test blocked")
+    end)
+    button(defense,"RecordDodge","Record nearby attacks · 10 sec",function()
+        API.Instinct.RecordEncounter();footer.Text="Recording nearby attacks for 10 seconds"
+    end)
+    button(defense,"CopyDodgeReport","Copy dodge report",function()
+        local _,copied=API.CopyDodgeReport();footer.Text=copied and "Dodge report copied" or "Dodge report printed in console"
+    end)
     local esp=section(M.visuals,"PLAYER ESP","Hero-colored chams, role above username. No boxes, tracers, distances or health bars.")
     toggle(esp,"ESP","Enable player ESP");toggle(esp,"Chams","Chams");toggle(esp,"Roles","Hero role");toggle(esp,"Names","Usernames")
     slider(esp,"ChamOpacity","Cham opacity",0,1,true)
@@ -141,10 +154,6 @@ return function(ctx)
     toggle(identity,"GuessRoles","Estimate unmapped roles")
     local settings=section(M.settings,"INTERFACE","Drag the header to move. Minimize to the Rift emblem; tap it to reopen. RightShift also toggles the window.")
     toggle(settings,"ReduceMotion","Reduce motion")
-    local function button(parent,name,title,fn)
-        local b=make("TextButton",{Name=name,Text=title,Size=UDim2.new(1,0,0,37),Font=Enum.Font.GothamBold,TextSize=12,
-            TextColor3=C.Text,BackgroundColor3=C.Raised,AutoButtonColor=false,BorderSizePixel=0},parent);round(b,8);hover(b);connect(b.Activated,fn)
-    end
     local tools=section(M.settings,"SESSION")
     button(tools,"CopyReport","Copy diagnostics",function() local _,copied=API.CopyDiagnostics();footer.Text=copied and "Diagnostics copied" or "Diagnostics printed in console" end)
     button(tools,"Rejoin","Rejoin server",function()
@@ -205,7 +214,7 @@ return function(ctx)
         for _,paint in ipairs(paints) do paint() end
         play.Text=API.Enabled and "STOP" or "PLAY"
         play.BackgroundColor3=API.Enabled and Color3.fromRGB(99,52,70) or C.Accent;play.TextColor3=API.Enabled and C.Text or C.Base
-        status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.Reactions.." reactions"
+        status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.Reactions.." move requests"..(API.Instinct.Recording and " · RECORDING" or "")
     end
     function M.Destroy()
         if dead then return end;dead=true;sliderDrag=nil;drag=nil
