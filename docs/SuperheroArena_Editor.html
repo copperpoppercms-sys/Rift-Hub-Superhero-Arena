@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rift Auto Play — Editable Lua script</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#101114;color:#f0ece3}*{box-sizing:border-box}body{margin:0}header{position:sticky;top:0;z-index:2;background:#17191df5;border-bottom:1px solid #31343b;padding:18px 24px;backdrop-filter:blur(12px)}.bar{max-width:1400px;margin:auto;display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap}h1{font-size:18px;margin:0 0 5px;letter-spacing:.02em}p{margin:0;font-size:12px;color:#a3a5ae}.actions{display:flex;gap:8px;flex-wrap:wrap}button,a{font:600 13px system-ui;border-radius:8px;padding:11px 15px;border:1px solid #454038;cursor:pointer;touch-action:manipulation}button{color:#17191d;background:#dd9f5e}button:hover{background:#efb778}button:active{transform:translateY(1px)}button:focus-visible,a:focus-visible{outline:3px solid #f0ece3;outline-offset:3px}a{background:#1d2025;color:#f0ece3;text-decoration:none}#status{max-width:1400px;margin:10px auto 0;font-size:12px;min-height:18px;color:#dd9f5e}main{max-width:1448px;margin:auto;padding:20px 24px 40px}.note{font-size:12px;line-height:1.6;color:#a3a5ae;margin-bottom:16px}pre{margin:0;padding:20px;background:#17191d;border:1px solid #31343b;border-radius:12px;overflow-x:auto;tab-size:4;font-size:12px;line-height:1.65;user-select:text;-webkit-user-select:text}code{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;color:#e0e3eb}@media(max-width:600px){header{padding:14px}.bar{gap:12px}main{padding:14px 10px 30px}pre{padding:14px;font-size:11px}.actions{width:100%}.actions button{flex:1}}
+
+#source{display:block;width:100%;min-height:70vh;margin:0;padding:20px;background:#17191d;color:#e0e3eb;border:1px solid #31343b;border-radius:12px;resize:vertical;overflow-x:auto;overflow-y:hidden;tab-size:4;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;white-space:pre;outline:none;caret-color:#dd9f5e}#source:focus{border-color:#dd9f5e;box-shadow:0 0 0 1px #dd9f5e55}@media(max-width:600px){#source{font-size:16px;padding:12px}}
+</style>
+</head>
+<body>
+<header>
+<div class="bar"><div><h1>RIFT AUTO PLAY / SUPERHERO ARENA</h1><p>Full editable Lua script · Tap the code to type</p></div><div class="actions"><button id="copy" type="button">Copy all code</button><button id="select" type="button">Select all</button><a id="download" href="#" download="RiftHub_SuperheroArena.lua">Download .lua</a></div></div>
+<div id="status" role="status" aria-live="polite">Edit the code below, then copy or download your version.</div>
+</header>
+<main><p class="note">Tap anywhere in the code to type or edit. Copy all code and Download .lua use your latest edits. Download your edited file to keep your changes.</p><details open><summary>Dash, abilities or punches still missing?</summary><p>After running the full hub, tap PLAY and let it approach an opponent with your combat HUD visible. Copy this report script, execute it in Delta, then paste the copied report into the chat. It reads local controls and makes no attacks or movement requests.</p><button id="reportCopy" type="button">Copy control report script</button><textarea id="reportSource" aria-label="Control report script" readonly spellcheck="false" rows="16" style="display:block;width:100%;margin:12px 0;background:#17191d;color:#e0e3eb">-- Run AFTER the full hub, while your hero's combat HUD is visible.
+local e = type(getgenv) == "function" and getgenv() or _G
+local h = e.SuperheroArenaHub
+if type(h) ~= "table" or type(h.Diagnostics) ~= "function" then
+    warn("Execute the updated Rift Auto Play script first.")
+    return
+end
+h.RefreshControls()
+local report = h.Diagnostics()
+print(report)
+if type(setclipboard) == "function" and pcall(setclipboard, report) then
+    print("Control report copied. Paste it into the chat.")
+else
+    warn("Clipboard unavailable. The report is printed in the console.")
+end
+</textarea></details><textarea id="source" aria-label="Editable Lua script" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off">-- Rift Hub / Superhero Arena / one-button native-control auto play.
+-- File-only. Normal movement, camera aiming and detected game controls.
+local Players=game:GetService("Players")
+local Run=game:GetService("RunService")
+local Input=game:GetService("UserInputService")
+local LocalPlayer=Players.LocalPlayer
+local env=type(getgenv)=="function" and getgenv() or _G
+local previous=env.SuperheroArenaHub
+if type(previous)=="table" and type(previous.Unload)=="function" then pcall(previous.Unload) end
+local alive,focused,dragging=true,true,false
+local connections,held={},{}
+local function connect(signal,fn) local c=signal:Connect(fn); table.insert(connections,c); return c end
+local function create(class,props,parent)
+	local node=Instance.new(class); for key,value in pairs(props) do node[key]=value end; node.Parent=parent; return node
+end
+local function normalize(value) return type(value)=="string" and value:lower():gsub("[^%w]","") or "" end
+local API={Game="Superhero Arena",Version="4.6",Enabled=false,Target=nil,Status="Off"}
+local gui=create("ScreenGui",{Name="RiftAutoPlay",ResetOnSpawn=false,IgnoreGuiInset=true,DisplayOrder=900},nil)
+do
+	local ok=pcall(function() gui.Parent=type(gethui)=="function" and gethui() or game:GetService("CoreGui") end)
+	if not ok or not gui.Parent then gui.Parent=LocalPlayer:WaitForChild("PlayerGui") end
+end
+local vim,pathService,actionService
+pcall(function() vim=game:GetService("VirtualInputManager") end)
+pcall(function() pathService=game:GetService("PathfindingService") end)
+pcall(function() actionService=game:GetService("ContextActionService") end)
+local statusLabel,playButton
+local function status(value)
+	API.Status=value
+	if API.Enabled then API.LastActiveStatus=value end
+	if statusLabel then statusLabel.Text=value end
+end
+local function body(plr)
+	if not plr then return end
+	local entities=workspace:FindFirstChild("Entities")
+	local entity=entities and entities:FindFirstChild(plr.Name)
+	for _,char in ipairs({plr.Character or false,entity or false}) do
+		local hum=char and char:FindFirstChildOfClass("Humanoid")
+		local root=char and char:FindFirstChild("HumanoidRootPart")
+		if char and char.Parent and hum and hum.Health&gt;0 and root and root:IsA("BasePart") then return char,hum,root end
+	end
+end
+local function release(press)
+	if not held[press] then return end; held[press]=nil
+	pcall(function()
+		if press.Signal then firesignal(press.Signal,press.X,press.Y)
+		elseif press.Touch then vim:SendTouchEvent(press.Touch,Enum.UserInputState.End,press.X,press.Y)
+		elseif press.Key then vim:SendKeyEvent(false,press.Key,false,game)
+		else vim:SendMouseButtonEvent(press.X,press.Y,0,false,game,0) end
+	end)
+end
+local function releaseAll() for press in pairs(held) do release(press) end end
+local function pulseKey(key,holdTime)
+	if not vim then return false,"Key input unavailable" end
+	for press in pairs(held) do if press.Key==key then release(press) end end
+	local ok,err=pcall(function() vim:SendKeyEvent(true,key,false,game) end)
+	if not ok then API.LastInputError=tostring(err); return false,"Key input unavailable" end
+	API.LastInput="Key requested: "..tostring(key)
+	local press={Key=key}; held[press]=true
+	task.delay(holdTime or 0.05,function() release(press) end)
+	return true
+end
+local disabledControls
+local function takeControls()
+	local scripts=LocalPlayer:FindFirstChild("PlayerScripts")
+	local module=scripts and scripts:FindFirstChild("PlayerModule")
+	if not module then return end
+	pcall(function()
+		local controls=require(module):GetControls()
+		if controls.controlsEnabled==true then controls:Disable(); disabledControls=controls end
+	end)
+end
+local function restoreControls()
+	if disabledControls then pcall(function() disabledControls:Enable() end); disabledControls=nil end
+end
+local clearCombo,combatBrain,groupTarget
+local targetPolicy={HoldUntil=0,ReviewAt=0,GroupSince=nil,Previous=nil,PreviousUntil=0,LastSwitch=0}
+local controls,controlAge={},1
+local slotNames={primaryskill=1,secondaryskill=2,tertiaryskill=3,quaternaryskill=4,skill1=1,skill2=2,skill3=3,skill4=4,ability1=1,ability2=2,ability3=3,ability4=4}
+local function visible(button)
+	if not button.Parent then return false end
+	local node=button
+	while node do
+		if node:IsA("GuiObject") and not node.Visible or node:IsA("ScreenGui") and not node.Enabled then return false end
+		node=node.Parent
+	end
+	return true
+end
+for slot=5,8 do slotNames["skill"..slot]=slot; slotNames["ability"..slot]=slot end
+-- Confirmed by the user's HUD_Mobile.AbilityBar control report.
+for slot=1,8 do slotNames["abilityicon"..slot]=slot end
+slotNames.ultimate=5; slotNames.ultimateskill=5
+local attackNames={"Attack","AttackButton","Punch","PunchButton","M1","M1Button","BasicAttack","LightAttack","MeleeAttack"}
+local dashNames={"Dash","DashButton","Dodge","DodgeButton"}
+local actionRoles={}
+for _,name in ipairs(attackNames) do actionRoles[normalize(name)]="attack" end
+for _,name in ipairs(dashNames) do actionRoles[normalize(name)]="dash" end
+local function actionWord(name)
+	local word=normalize(name)
+	for _,prefix in ipairs({"combat","hero"}) do
+		if word:sub(1,#prefix)==prefix then word=word:sub(#prefix+1); break end
+	end
+	if word:sub(-6)=="action" then word=word:sub(1,-7) end
+	return word
+end
+local boundActions={}
+local keyNames={["1"]="One",["2"]="Two",["3"]="Three",["4"]="Four",["5"]="Five",["6"]="Six",["7"]="Seven",["8"]="Eight"}
+local function readKey(value)
+	if type(value)~="string" or value=="" then return nil end
+	local key
+	pcall(function() key=Enum.KeyCode[keyNames[value] or (#value==1 and value:upper() or value)] end)
+	return key
+end
+local function scan()
+	controls={}; controlAge=0
+	local pg=LocalPlayer:FindFirstChild("PlayerGui")
+	for i,button in ipairs(pg and pg:GetDescendants() or {}) do
+		if i&gt;3000 then break end
+		if button:IsA("GuiButton") and not button:IsDescendantOf(gui) and visible(button) then
+			local item={Button=button,Words={}}
+			item.Words[normalize(button.Name)]=true
+			if button:IsA("TextButton") then item.Words[normalize(button.Text)]=true end
+			item.Slot=tonumber(button:GetAttribute("SkillSlot") or button:GetAttribute("AbilitySlot")) or slotNames[normalize(button.Name)]
+			local name=button:GetAttribute("SkillName") or button:GetAttribute("AbilityName")
+			if type(name)=="string" then item.Words[normalize(name)]=true end
+			item.Key=readKey(button:GetAttribute("KeyCode") or button:GetAttribute("Keybind"))
+			local function readLabel(child)
+				if child:IsA("TextLabel") then
+					item.Words[normalize(child.Text)]=true
+					local name=normalize(child.Name)
+					if name=="key" or name=="keybind" or name=="keycode" or name=="hotkey" then item.Key=item.Key or readKey(child.Text) end
+				end
+			end
+			for _,child in ipairs(button:GetDescendants()) do readLabel(child) end
+			-- Many mobile HUDs put an unnamed ImageButton inside a named skill frame.
+			local parent=button.Parent
+			if parent and parent:IsA("GuiObject") then
+				local buttonCount=0
+				for _,child in ipairs(parent:GetDescendants()) do if child:IsA("GuiButton") then buttonCount+=1 end end
+				if buttonCount==1 then
+					item.Words[normalize(parent.Name)]=true
+					item.Slot=item.Slot or slotNames[normalize(parent.Name)]
+					for _,child in ipairs(parent:GetChildren()) do readLabel(child) end
+				end
+			end
+			table.insert(controls,item)
+		end
+	end
+	boundActions={}
+	if actionService then
+		local ok,info=pcall(function() return actionService:GetAllBoundActionInfo() end)
+		if ok and type(info)=="table" then boundActions=info end
+	end
+	for name,info in pairs(boundActions) do
+		local word=actionWord(name)
+		if type(info)=="table" and (actionRoles[word] or slotNames[word] or word=="repulsorblast" or word=="unibeam") then
+			local key,mouse
+			for _,binding in ipairs(type(info.inputTypes)=="table" and info.inputTypes or {}) do
+				pcall(function()
+					if binding.EnumType==Enum.KeyCode and binding~=Enum.KeyCode.Unknown then key=key or binding
+					elseif binding==Enum.UserInputType.MouseButton1 and actionRoles[word]=="attack" then mouse=true end
+				end)
+			end
+			if key or mouse then table.insert(controls,{Action=name,Words={[word]=true},Slot=slotNames[word],Key=key,Mouse=mouse}) end
+		end
+	end
+	-- Keep the HUD cooldown metadata while using the actual CAS dash key.
+	for _,action in ipairs(controls) do
+		if action.Action and actionRoles[actionWord(action.Action)]=="dash" and action.Key then
+			for _,item in ipairs(controls) do
+				if item.Button then
+					for _,name in ipairs(dashNames) do
+						if item.Words[normalize(name)] then item.NativeKey=action.Key; break end
+					end
+				end
+			end
+		end
+	end
+end
+local function handlerCount(event)
+	if type(getconnections)~="function" then return nil end
+	local ok,list=pcall(getconnections,event)
+	if not ok or type(list)~="table" then return nil end
+	local count=0
+	for _,connection in ipairs(list) do
+		local active=true
+		pcall(function() if connection.Enabled==false then active=false end end)
+		pcall(function() if connection.Connected==false then active=false end end)
+		if active then count+=1 end
+	end
+	return count
+end
+local function preferControl(a,b)
+	if a==false then return false end
+	if not a then return b end
+	if a.Action and not b.Action then return b end
+	if not a.Action and b.Action then return a end
+	if a.Action and b.Action and a.Key==b.Key and a.Mouse==b.Mouse then return a end
+	return false -- genuinely ambiguous controls are left alone
+end
+local function find(names)
+	local result
+	for _,item in ipairs(controls) do
+		local match=false; for _,name in ipairs(names) do if item.Words[normalize(name)] then match=true; break end end
+		if match and (item.Action or visible(item.Button)) then result=preferControl(result,item) end
+	end
+	return result or nil
+end
+local touchSequence=700
+local function tapButton(button)
+	if not vim or not visible(button) then return false,"Mobile input unavailable" end
+	local size,pos=button.AbsoluteSize,button.AbsolutePosition
+	if size.X&lt;=0 or size.Y&lt;=0 then return false,"Game button has no visible area" end
+	local x,y=pos.X+size.X/2,pos.Y+size.Y/2
+	local screen=button:FindFirstAncestorWhichIsA("ScreenGui")
+	if screen and not screen.IgnoreGuiInset then
+		pcall(function() local inset=game:GetService("GuiService"):GetGuiInset(); x+=inset.X; y+=inset.Y end)
+	end
+	local camera=workspace.CurrentCamera
+	if not camera or x&lt;0 or y&lt;0 or x&gt;=camera.ViewportSize.X or y&gt;=camera.ViewportSize.Y then return false,"Game button is off screen" end
+	-- Real input reaches InputBegan/Touch handlers that firesignal(Activated) misses.
+	if Input.TouchEnabled then
+		touchSequence+=1
+		local press={Touch=touchSequence,X=x,Y=y}
+		local ok=pcall(function() vim:SendTouchEvent(press.Touch,Enum.UserInputState.Begin,x,y) end)
+		if ok then API.LastInput="Touch requested: "..button:GetFullName(); held[press]=true; task.delay(0.06,function() release(press) end); return true end
+	end
+	local ok=pcall(function() vim:SendMouseButtonEvent(x,y,0,true,game,0) end)
+	if ok then API.LastInput="Click requested: "..button:GetFullName(); local press={X=x,Y=y}; held[press]=true; task.delay(0.06,function() release(press) end); return true end
+	return false,"Executor blocked game button input"
+end
+local function ready(item)
+	if item and item.Action then return vim~=nil end
+	local b=item and item.Button
+	if not b or not visible(b) or b:GetAttribute("OnCooldown")==true or b:GetAttribute("Ready")==false or b:GetAttribute("Available")==false or b:GetAttribute("Unlocked")==false or (tonumber(b:GetAttribute("CooldownRemaining")) or 0)&gt;0 then return false end
+	if type(firesignal)=="function" then
+		if type(getconnections)~="function" then return true end
+		local ok,a=pcall(getconnections,b.Activated); local ok2,c=pcall(getconnections,b.MouseButton1Click)
+		if not ok or not ok2 or #a&gt;0 or #c&gt;0 or (handlerCount(b.MouseButton1Down) or 0)&gt;0 then return true end
+	end
+	return vim~=nil
+end
+local function fire(item)
+	if not ready(item) then return false,"Control unavailable or cooling down" end
+	if item.Action then
+		if item.Key then return pulseKey(item.Key) end
+		local camera=workspace.CurrentCamera
+		if camera and item.Mouse then
+			local x,y=camera.ViewportSize.X/2,camera.ViewportSize.Y/2
+			local ok=pcall(function() vim:SendMouseButtonEvent(x,y,0,true,game,0) end)
+			if ok then
+				local press={X=x,Y=y}; held[press]=true; task.delay(0.05,function() release(press) end)
+				API.LastInput="Bound attack requested: "..item.Action; return true
+			end
+		end
+		return false,"Bound action input unavailable"
+	end
+	local button=item.Button
+	-- Use the binding actually displayed on AbilityIconN, not a guessed hotkey.
+	local key=item.Key or item.NativeKey
+	if key and (item.Slot or item.NativeKey) then
+		local ok=pulseKey(key,math.clamp(tonumber(button:GetAttribute("InputHoldTime")) or 0.05,0.03,2))
+		if ok then return true end
+	end
+	if type(firesignal)=="function" then
+		local event=button.Activated
+		if type(getconnections)~="function" and vim then
+			local ok=tapButton(button); if ok then return true end
+		end
+		if type(getconnections)=="function" then
+			local ok,a=pcall(getconnections,event); local ok2,c=pcall(getconnections,button.MouseButton1Click)
+			if ok and ok2 then
+				if #a==0 and #c&gt;0 then event=button.MouseButton1Click
+				elseif #a==0 and #c==0 then
+					if (handlerCount(button.MouseButton1Down) or 0)&gt;0 then
+						local pos,size=button.AbsolutePosition,button.AbsoluteSize
+						local x,y=pos.X+size.X/2,pos.Y+size.Y/2
+						local ok,err=pcall(firesignal,button.MouseButton1Down,x,y)
+						if ok then
+							local press={Signal=button.MouseButton1Up,X=x,Y=y}; held[press]=true
+							task.delay(0.06,function() release(press) end)
+							API.LastInput="Button press requested: "..button:GetFullName(); return true
+						end
+						API.LastInputError=tostring(err)
+					end
+					if item.Key then return pulseKey(item.Key,math.clamp(tonumber(button:GetAttribute("InputHoldTime")) or 0.05,0.03,2)) end
+					return tapButton(button)
+				end
+			end
+		end
+		local ok=pcall(firesignal,event); if ok then API.LastInput="Signal requested: "..button:GetFullName(); return true end
+	end
+	if item.Key then return pulseKey(item.Key,math.clamp(tonumber(button:GetAttribute("InputHoldTime")) or 0.05,0.03,2)) end
+	return tapButton(button)
+end
+local function skills()
+	local bySlot={}
+	local char=body(LocalPlayer)
+	local hero=normalize(char and (char:GetAttribute("MorphCurrent") or char:GetAttribute("power")))
+	local iron=hero=="ironman"
+	for _,item in ipairs(controls) do
+		local slot=item.Slot
+		if iron and item.Words.repulsorblast then slot=1 end
+		if iron and item.Words.unibeam then slot=3 end
+		if slot and slot%1==0 and slot&gt;=1 and slot&lt;=8 then
+			bySlot[slot]=preferControl(bySlot[slot],item)
+		end
+	end
+	return bySlot
+end
+local walker,walkGoal,rotationHumanoid,oldAutoRotate,sessionRoot,sessionTargetRoot
+local function walkTo(hum,goal)
+	-- Save the destination for steering after the default mobile controls update.
+	walker=hum; walkGoal=goal; hum:MoveTo(goal)
+end
+local route,routeIndex,lastJump,routeTimer,pending,epoch={},1,nil,2,nil,0
+local function stopMotion()
+	if walker and walker.Parent then local root=walker.Parent:FindFirstChild("HumanoidRootPart"); if root then pcall(function() walker:MoveTo(root.Position) end) end end
+	if walker then pcall(function() walker:Move(Vector3.new(),false) end) end
+	walker=nil; walkGoal=nil
+	if rotationHumanoid then pcall(function() rotationHumanoid.AutoRotate=oldAutoRotate end) end
+	rotationHumanoid=nil
+end
+local function reset()
+	if clearCombo then clearCombo() end
+	releaseAll(); stopMotion(); API.Target=nil; sessionRoot=nil; sessionTargetRoot=nil
+	epoch+=1; route={}; routeIndex=1; lastJump=nil; routeTimer=2; pending=nil
+end
+local function opposing(plr)
+	return plr~=LocalPlayer and plr.Parent==Players and not (LocalPlayer.Team and plr.Team==LocalPlayer.Team and not LocalPlayer.Neutral and not plr.Neutral)
+end
+local elapsedTime,unreachable=0,{}
+local function selectTarget(root)
+	local _,_,current=body(API.Target)
+	if current and opposing(API.Target) and (unreachable[API.Target] or 0)&lt;=elapsedTime and (current.Position-root.Position).Magnitude&lt;=250 then
+		return groupTarget and groupTarget(root,API.Target) or API.Target
+	end
+	local best,distance
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if opposing(plr) and (unreachable[plr] or 0)&lt;=elapsedTime then local _,_,other=body(plr); if other then
+			local d=(other.Position-root.Position).Magnitude
+			if d&lt;=250 and (not distance or d&lt;distance or d==distance and plr.UserId&lt;best.UserId) then best=plr; distance=d end
+		end end
+	end
+	return best
+end
+local function lineOfSight(origin,point,char)
+	local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances={body(LocalPlayer)}; params.IgnoreWater=true
+	local hit=workspace:Raycast(origin,point-origin,params)
+	return not hit or hit.Instance:IsDescendantOf(char)
+end
+local function chase(hum,root,targetRoot,clear,dt,desiredGoal)
+	local destination=desiredGoal or targetRoot.Position
+	routeTimer+=dt; walker=hum
+	if clear then walkTo(hum,destination); route={}; return end
+	if not pathService then walkTo(hum,destination); return end
+	if not pending and routeTimer&gt;=1.2 then
+		routeTimer=0
+		local job={Epoch=epoch,Target=API.Target,OwnRoot=root,TargetRoot=targetRoot}; pending=job
+		local origin,goal=root.Position,destination
+		task.spawn(function()
+			local waypoints
+			local ok=pcall(function()
+				local path=pathService:CreatePath({AgentRadius=2,AgentHeight=5,AgentCanJump=true})
+				path:ComputeAsync(origin,goal)
+				if path.Status==Enum.PathStatus.Success then waypoints=path:GetWaypoints() end
+			end)
+			if pending~=job then return end
+			pending=nil
+			if not alive or not API.Enabled or epoch~=job.Epoch or API.Target~=job.Target or select(3,body(LocalPlayer))~=job.OwnRoot or select(3,body(job.Target))~=job.TargetRoot then routeTimer=2; return end
+			if ok and waypoints and #waypoints&gt;1 then route=waypoints; routeIndex=2; lastJump=nil else route={}; unreachable[job.Target]=elapsedTime+4; API.Target=nil; stopMotion() end
+		end)
+	end
+	local point=route[routeIndex]
+	if point and (point.Position-root.Position).Magnitude&lt;=3 then routeIndex+=1; point=route[routeIndex] end
+	if point then
+		if point.Action==Enum.PathWaypointAction.Jump and lastJump~=routeIndex then hum.Jump=true; lastJump=routeIndex end
+		walkTo(hum,point.Position)
+	else walkTo(hum,root.Position) end
+end
+local accumulator=0
+local function live()
+	return alive and API.Enabled and focused and not dragging and not Input:GetFocusedTextBox()
+end
+local function aimPoint(targetRoot)
+	local leadTime=0.08
+	local item=combatBrain and ((elapsedTime&lt;combatBrain.NextAt and combatBrain.Cast) or combatBrain.AimSkill)
+	if item then
+		local b=item.Button
+		local speed=b and tonumber(b:GetAttribute("ProjectileSpeed"))
+		local _,_,root=body(LocalPlayer)
+		if b and b:GetAttribute("Hitscan")==true then leadTime=0
+		elseif speed and speed&gt;0 and root then leadTime=math.clamp((targetRoot.Position-root.Position).Magnitude/speed,0,0.35) end
+	end
+	local lead=targetRoot.AssemblyLinearVelocity*leadTime
+	if lead.Magnitude&gt;10 then lead=lead.Unit*10 end
+	return targetRoot.Position+lead
+end
+local function aim(dt)
+	if not live() or not body(LocalPlayer) then return end
+	local camera=workspace.CurrentCamera; local char,_,root=body(API.Target)
+	if combatBrain and combatBrain.SuppressAttack and combatBrain.FaceRoot and combatBrain.FaceRoot.Parent then
+		root=combatBrain.FaceRoot; char=root.Parent
+	end
+	if not camera or camera.CameraType==Enum.CameraType.Scriptable or not root then return end
+	local point=aimPoint(root)
+	if (point-camera.CFrame.Position).Magnitude&gt;0.1 and lineOfSight(camera.CFrame.Position,root.Position,char) then
+		camera.CFrame=camera.CFrame:Lerp(CFrame.lookAt(camera.CFrame.Position,point),1-math.exp(-22*math.clamp(tonumber(dt) or 1/60,0,0.1)))
+	end
+end
+local function primary(point)
+	local item=find(attackNames)
+	if item then return fire(item) end
+	local char=body(LocalPlayer)
+	local tool=char and char:FindFirstChildOfClass("Tool")
+	if tool then return pcall(function() tool:Activate() end) end
+	if vim and not Input.TouchEnabled and point then
+		local ok=pcall(function() vim:SendMouseButtonEvent(point.X,point.Y,0,true,game,0) end)
+		if ok then local press={X=point.X,Y=point.Y}; held[press]=true; task.delay(0.05,function() release(press) end); return true end
+	end
+	return false,"Attack control not detected"
+end
+function API.Diagnostics()
+	local char,hum,root=body(LocalPlayer)
+	local report={"Rift Auto Play / "..API.Version,"Status: "..API.Status,"Last active status: "..tostring(API.LastActiveStatus or "not started"),
+		"Target: "..(API.Target and API.Target.Name or "none"),"Movement: "..tostring(combatBrain and combatBrain.Mode or "not ready"),
+		"Touch device: "..tostring(Input.TouchEnabled),"Virtual input service: "..tostring(vim~=nil),
+		"Character: "..(char and char:GetFullName() or "missing"),
+		"canRun: "..tostring(char and char:GetAttribute("canRun")),
+		"canAttack: "..tostring(char and char:GetAttribute("canAttack")),
+		"busy: "..tostring(char and char:GetAttribute("busy")),
+		"WalkSpeed: "..tostring(hum and hum.WalkSpeed),"Root anchored: "..tostring(root and root.Anchored),
+		"Last error: "..tostring(API.LastError or "none"),"Last input error: "..tostring(API.LastInputError or "none"),"Last input: "..tostring(API.LastInput or "none"),"Detected controls: "..#controls}
+	for _,item in ipairs(controls) do
+		local words={}; for word in pairs(item.Words) do if word~="" then table.insert(words,word) end end; table.sort(words)
+		local handlers=""
+		if item.Button then
+			handlers=" | Activated="..tostring(handlerCount(item.Button.Activated)).." Click="..tostring(handlerCount(item.Button.MouseButton1Click)).." Down="..tostring(handlerCount(item.Button.MouseButton1Down)).." InputBegan="..tostring(handlerCount(item.Button.InputBegan))
+		end
+		table.insert(report,(item.Action and "Action: "..item.Action or item.Button:GetFullName()).." | slot="..tostring(item.Slot).." | key="..tostring(item.Key or item.NativeKey)..handlers.." | "..table.concat(words,", "))
+	end
+	table.insert(report,"Bound actions (including unfamiliar names):")
+	for name,info in pairs(boundActions) do
+		local bindings={}
+		if type(info)=="table" and type(info.inputTypes)=="table" then
+			for _,binding in ipairs(info.inputTypes) do table.insert(bindings,tostring(binding)) end
+		end
+		table.insert(report,tostring(name).." = "..table.concat(bindings,", "))
+	end
+	-- Include labels for HUDs that use frames/custom touch handlers rather than GuiButtons.
+	local pg=LocalPlayer:FindFirstChild("PlayerGui")
+	if pg then
+		table.insert(report,"Visible HUD labels / active frames:")
+		local count=0
+		for _,node in ipairs(pg:GetDescendants()) do
+			if not node:IsDescendantOf(gui) and visible(node) and
+				(node:IsA("TextLabel") and node.Text~="" or node:IsA("Frame") and node.Active) then
+				local text=node:IsA("TextLabel") and node.Text:sub(1,160) or "[active frame]"
+				table.insert(report,node:GetFullName().." = "..text); count+=1
+				if count&gt;=120 then table.insert(report,"[label limit reached]"); break end
+			end
+		end
+	end
+	return table.concat(report,"\n")
+end
+function API.CopyDiagnostics()
+	scan()
+	local report=API.Diagnostics()
+	print(report)
+	local copied=type(setclipboard)=="function" and pcall(setclipboard,report)
+	return report,copied==true
+end
+function API.SetEnabled(value)
+	API.Enabled=alive and value==true; reset(); table.clear(unreachable)
+	targetPolicy.HoldUntil=0; targetPolicy.ReviewAt=0; targetPolicy.GroupSince=nil; targetPolicy.Previous=nil
+	if API.Enabled then scan(); takeControls() else restoreControls() end
+	status(API.Enabled and "Looking for a target…" or "Off")
+	if playButton then playButton.Text=API.Enabled and "STOP" or "PLAY"; playButton.BackgroundColor3=API.Enabled and Color3.fromRGB(98,48,44) or Color3.fromRGB(72,91,68) end
+end
+-- Planning defaults are conservative fallbacks; explicit game metadata takes priority.
+local brain={Index=1,Melee=0,SkillStreak=0,NextAt=0,StillUntil=0,DashAt=-math.huge,DashRetry=0,
+	StableAim=0,MoveAt=0,MoveGoal=nil,LastHealth=nil,HitAt=-math.huge,
+	HeroKey=nil,Cast=nil,LastPosition=nil,Stuck=0,MoveInput=nil,Plans={},
+	Side=1,SideUntil=0,Spacing=5,GapRange=22,Threat=nil,DefenseGoal=nil,
+	Observations=setmetatable({},{__mode="k"}),Mode="spacing",ModeUntil=0,ModeGoal=nil,
+	ModeCheckAt=0,FaceRoot=nil,FaceTravel=false,SuppressAttack=false,Chaser=nil,Steering=nil}
+local lastUsed=setmetatable({},{__mode="k"})
+API.Brain=brain; combatBrain=brain
+local function roll(low,high) return low+(high-low)*math.random() end
+local function numberAttribute(button,name,fallback,low,high)
+	local value=button and tonumber(button:GetAttribute(name))
+	if not value or value~=value or math.abs(value)==math.huge then return fallback end
+	return math.clamp(value,low,high)
+end
+clearCombo=function()
+	brain.Index=1; brain.Melee=0; brain.SkillStreak=0; brain.StableAim=0
+	brain.MoveAt=0; brain.MoveGoal=nil; brain.LastHealth=nil; brain.AimSkill=nil
+	if elapsedTime&gt;=brain.NextAt then brain.Cast=nil end
+	brain.LastPosition=nil; brain.Stuck=0; brain.HitAt=-math.huge
+	brain.Plans={}; brain.Threat=nil; brain.DefenseGoal=nil; brain.Observations=setmetatable({},{__mode="k"})
+	brain.Side=math.random()&lt;0.5 and -1 or 1; brain.SideUntil=elapsedTime+roll(1.1,2.4)
+	brain.Spacing=roll(4.2,6.1); brain.GapRange=roll(20,24)
+	brain.Mode="spacing"; brain.ModeUntil=0; brain.ModeGoal=nil; brain.ModeCheckAt=elapsedTime+roll(0.8,1.4)
+	brain.FaceRoot=nil; brain.FaceTravel=false; brain.SuppressAttack=false; brain.Chaser=nil; brain.ClosingPursuer=nil; brain.Steering=nil
+	if brain.MoveInput then pcall(function() brain.MoveInput:Move(Vector3.new(),false) end); brain.MoveInput=nil end
+	brain.DashDirection=nil
+end
+local function orderedSkills()
+	local list={}
+	for slot,item in pairs(skills()) do
+		if item then
+			table.insert(list,{Item=item,Slot=slot,Order=numberAttribute(item.Button,"ComboOrder",slot,1,100)})
+		end
+	end
+	table.sort(list,function(a,b) if a.Order==b.Order then return a.Slot&lt;b.Slot end; return a.Order&lt;b.Order end)
+	return list
+end
+local function skillRange(item)
+	local b=item.Button
+	local maximum=numberAttribute(b,"MaxRange",nil,2,250) or numberAttribute(b,"Range",nil,2,250)
+	-- Supplied Iron Man skills are ranged; other unclassified skills use a short planning radius.
+	maximum=maximum or ((item.Words.repulsorblast or item.Words.unibeam) and 60 or 22)
+	return numberAttribute(b,"MinRange",0,0,maximum),maximum
+end
+local function skillPlan(item)
+	local id=item.Button or item.Action
+	local low,high=skillRange(item)
+	local plan=brain.Plans[id]
+	if not plan or plan.Low~=low or plan.High~=high then
+		-- Sample once per use, not every tick. Never extend the skill's hard range.
+		local trigger=low+(high-low)*roll(0.58,0.94)
+		plan={Low=low,High=high,Trigger=trigger,
+			Preferred=math.clamp(low+(trigger-low)*roll(0.32,0.60),math.min(4.2,trigger),trigger)}
+		brain.Plans[id]=plan
+	end
+	return plan
+end
+local function skillReady(item,distance)
+	if not ready(item) then return false end
+	local plan=skillPlan(item)
+	if distance&lt;plan.Low or distance&gt;plan.Trigger then return false end
+	local last=lastUsed[item.Button or item.Action]
+	local retry=numberAttribute(item.Button,"CooldownDuration",1.5,0.25,90)
+	return not last or elapsedTime-last&gt;=retry-1e-6
+end
+local function chooseSkill(distance)
+	local list=orderedSkills()
+	if #list==0 then return nil end
+	for offset=0,#list-1 do
+		local index=(brain.Index-1+offset)%#list+1
+		if skillReady(list[index].Item,distance) then return list[index].Item,index,#list end
+	end
+end
+local function desiredSpacing(hum,distance)
+	local health=hum.Health/math.max(hum.MaxHealth,1)
+	if health&lt;0.35 then return roll(9,12) end
+	if brain.Melee&gt;0 or brain.SkillStreak&gt;=2 then return brain.Spacing end
+	local item=chooseSkill(distance)
+	if item then
+		local plan=skillPlan(item)
+		return math.clamp(plan.Preferred,4.2,12)
+	end
+	return brain.Spacing
+end
+local function haltWalking(hum,root)
+	if walker then hum:MoveTo(root.Position); hum:Move(Vector3.new(),false); walker=nil; walkGoal=nil end
+	if brain.MoveInput then pcall(function() brain.MoveInput:Move(Vector3.new(),false) end); brain.MoveInput=nil end
+end
+local function floorSafe(goal)
+	local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Exclude
+	local own=body(LocalPlayer); local target=body(API.Target)
+	params.FilterDescendantsInstances={own,target}; params.IgnoreWater=true
+	return workspace:Raycast(goal+Vector3.new(0,3,0),Vector3.new(0,-9,0),params)~=nil
+end
+local function safeLocalMove(root,goal,targetChar)
+	return floorSafe(goal) and lineOfSight(root.Position,goal,targetChar)
+end
+groupTarget=function(root,current)
+	if elapsedTime&lt;targetPolicy.HoldUntil or elapsedTime&lt;targetPolicy.ReviewAt then return current end
+	if elapsedTime&lt;brain.NextAt or elapsedTime&lt;brain.StillUntil or brain.Melee&gt;0 then return current end
+	targetPolicy.ReviewAt=elapsedTime+0.35
+	local candidates={}
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if opposing(plr) and (unreachable[plr] or 0)&lt;=elapsedTime then
+			local char,hum,other=body(plr)
+			if other then
+				local distance=(other.Position-root.Position).Magnitude
+				if distance&lt;=32 and math.abs(other.Position.Y-root.Position.Y)&lt;10 and lineOfSight(root.Position,other.Position,char) then
+					table.insert(candidates,{Player=plr,Root=other,Health=hum.Health/math.max(hum.MaxHealth,1),
+						Distance=distance,Protected=char:GetAttribute("iframes")==true})
+				end
+			end
+		end
+	end
+	if #candidates&lt;2 then targetPolicy.GroupSince=nil; return current end
+	if not targetPolicy.GroupSince then targetPolicy.GroupSince=elapsedTime; targetPolicy.HoldUntil=elapsedTime+roll(1.1,1.8); return current end
+	local best,currentEntry
+	for _,entry in ipairs(candidates) do
+		local crowd=0
+		for _,other in ipairs(candidates) do if other~=entry and (other.Root.Position-entry.Root.Position).Magnitude&lt;9 then crowd+=1 end end
+		entry.Score=entry.Distance+entry.Health*5+crowd*2.5+(entry.Protected and 30 or 0)
+		if entry.Player==targetPolicy.Previous and elapsedTime&lt;targetPolicy.PreviousUntil then entry.Score+=12 end
+		if entry.Player==current then currentEntry=entry
+		elseif not entry.Protected and (not best or entry.Score&lt;best.Score or entry.Score==best.Score and entry.Player.UserId&lt;best.Player.UserId) then best=entry end
+	end
+	if best and not currentEntry then return best.Player end
+	if best and currentEntry then
+		local opening=best.Score&lt;currentEntry.Score-4.5
+		local rotate=elapsedTime-targetPolicy.LastSwitch&gt;=2.5 and elapsedTime-targetPolicy.GroupSince&gt;=1.3 and best.Score&lt;=currentEntry.Score+5
+		if opening or rotate then return best.Player end
+	end
+	return current
+end
+local function pursuer(root,targetRoot)
+	local best,bestDistance
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if opposing(plr) then
+			local char,_,other=body(plr)
+			if other then
+				local away=Vector3.new(root.Position.X-other.Position.X,0,root.Position.Z-other.Position.Z)
+				local facing=other.CFrame.LookVector
+				if facing and away.Magnitude&gt;0.1 and away.Magnitude&lt;18 and math.abs(root.Position.Y-other.Position.Y)&lt;8 then
+					local closing=(other.AssemblyLinearVelocity-root.AssemblyLinearVelocity):Dot(away.Unit)
+					local behind=Vector3.new(targetRoot.Position.X-root.Position.X,0,targetRoot.Position.Z-root.Position.Z):Dot(away)&gt;0
+					local following=behind and other.AssemblyLinearVelocity:Dot(away.Unit)&gt;6
+					if (closing&gt;2 or following) and facing:Dot(away.Unit)&gt;0.45 and (behind or away.Magnitude&lt;9) and lineOfSight(root.Position,other.Position,char) and
+						(not bestDistance or away.Magnitude&lt;bestDistance) then best=other; bestDistance=away.Magnitude end
+				end
+			end
+		end
+	end
+	return best
+end
+local function crowdPressure(root,targetChar)
+	local pressure=Vector3.new(); local count=0
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if opposing(plr) then
+			local char,_,other=body(plr)
+			if other and char~=targetChar then
+				local away=Vector3.new(root.Position.X-other.Position.X,0,root.Position.Z-other.Position.Z)
+				if away.Magnitude&gt;0.1 and away.Magnitude&lt;14 and math.abs(root.Position.Y-other.Position.Y)&lt;8 and lineOfSight(root.Position,other.Position,char) then
+					pressure+=away.Unit*((14-away.Magnitude)/14); count+=1
+				end
+			end
+		end
+	end
+	return pressure,count
+end
+local function movementPattern(hum,root,targetRoot,targetChar,distance,clear)
+	if brain.ModeGoal and elapsedTime&lt;brain.ModeUntil then
+		if not safeLocalMove(root,brain.ModeGoal,targetChar) or not floorSafe((root.Position+brain.ModeGoal)*0.5) or brain.Chaser and not brain.Chaser.Parent then
+			brain.ModeUntil=0
+		else
+			if brain.Chaser then
+				brain.FaceTravel=elapsedTime&lt;brain.TurnAt; brain.FaceRoot=not brain.FaceTravel and brain.Chaser or nil
+				brain.Mode=brain.FaceTravel and "retreat turn" or "backpedal"
+				brain.SuppressAttack=brain.FaceTravel or brain.Chaser~=targetRoot
+			end
+			walkTo(hum,brain.ModeGoal); return true
+		end
+	end
+	brain.ModeGoal=nil; brain.FaceRoot=nil; brain.FaceTravel=false; brain.SuppressAttack=false; brain.Chaser=nil; brain.Mode="spacing"
+	if elapsedTime&lt;brain.ModeCheckAt or not clear then return false end
+	brain.ModeCheckAt=elapsedTime+roll(0.8,1.4)
+	local chaser=brain.ClosingPursuer
+	local pressure,count=crowdPressure(root,targetChar)
+	local toward=Vector3.new(targetRoot.Position.X-root.Position.X,0,targetRoot.Position.Z-root.Position.Z)
+	if toward.Magnitude&lt;0.1 then return false end
+	toward=toward.Unit
+	local side=Vector3.new(-toward.Z,0,toward.X)*brain.Side
+	local goal,mode
+	if chaser then
+		local away=Vector3.new(root.Position.X-chaser.Position.X,0,root.Position.Z-chaser.Position.Z).Unit
+		goal=root.Position+(away+Vector3.new(-away.Z,0,away.X)*0.25).Unit*roll(6,9)
+		mode="retreat turn"
+	elseif count&gt;0 and distance&lt;=24 then
+		goal=targetRoot.Position-toward*desiredSpacing(hum,distance)+side*roll(3.5,5.5)+pressure*3
+		mode="flank"
+	elseif distance&gt;=6 and distance&lt;=26 and math.random()&lt;0.38 then
+		goal=root.Position+side*roll(4,6)+toward*(distance&gt;13 and roll(2,4) or 0)
+		mode="side run"
+	end
+	if goal and safeLocalMove(root,goal,targetChar) and floorSafe((root.Position+goal)*0.5) then
+		brain.Mode=mode; brain.ModeGoal=goal; brain.ModeUntil=elapsedTime+roll(0.8,1.25)
+		brain.Chaser=chaser; brain.TurnAt=elapsedTime+roll(0.3,0.45)
+		brain.FaceTravel=chaser~=nil; brain.SuppressAttack=chaser~=nil
+		walkTo(hum,goal); return true
+	end
+	return false
+end
+local attackStates={attack=true,attacking=true,casting=true,charging=true,windup=true,swinging=true,usingability=true}
+local function observeThreats(root)
+	local threat=brain.Threat
+	if threat then
+		local char,_,other=body(threat.Player)
+		if not other or other~=threat.Root or not opposing(threat.Player) or elapsedTime&gt;threat.Until or
+			(other.Position-root.Position).Magnitude&gt;20 or not lineOfSight(root.Position,other.Position,char) then
+			brain.Threat=nil; brain.DefenseGoal=nil
+		elseif other.CFrame.LookVector then
+			local delta=Vector3.new(root.Position.X-other.Position.X,0,root.Position.Z-other.Position.Z)
+			local look=other.CFrame.LookVector; local forward=Vector3.new(look.X,0,look.Z)
+			if delta.Magnitude&gt;0.1 and forward.Magnitude&gt;0.1 and forward.Unit:Dot(delta.Unit)&lt;0.25 then
+				brain.Threat=nil; brain.DefenseGoal=nil
+			end
+		end
+	end
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if opposing(plr) then
+			local char,_,other=body(plr)
+			if other then
+				local delta=Vector3.new(root.Position.X-other.Position.X,0,root.Position.Z-other.Position.Z)
+				local swing=tonumber(char:GetAttribute("lastSwing"))
+				local attacking=attackStates[normalize(char:GetAttribute("state"))]==true
+				local previous=brain.Observations[plr]
+				brain.Observations[plr]={Swing=swing,Attacking=attacking}
+				local changed=previous and ((swing and previous.Swing and swing&gt;previous.Swing) or attacking and not previous.Attacking)
+				local facing=other.CFrame.LookVector
+				if changed and facing and delta.Magnitude&gt;0.1 and delta.Magnitude&lt;=17 and math.abs(root.Position.Y-other.Position.Y)&lt;8 then
+					local forward=Vector3.new(facing.X,0,facing.Z)
+					if forward.Magnitude&gt;0.1 and forward.Unit:Dot(delta.Unit)&gt;0.45 and lineOfSight(root.Position,other.Position,char) then
+						local current=brain.Threat
+						if not current or delta.Magnitude&lt;(current.Root.Position-root.Position).Magnitude then
+							brain.Threat={Player=plr,Root=other,ReactAt=elapsedTime+roll(0.10,0.22),Until=elapsedTime+0.65}
+							brain.DefenseGoal=nil
+						end
+					end
+				end
+			end
+		end
+	end
+end
+local function activeThreat()
+	local threat=brain.Threat
+	return threat and elapsedTime&gt;=threat.ReactAt and elapsedTime&lt;=threat.Until and threat or nil
+end
+local function safeDodge(root,attackerRoot,targetChar,lowHealth,lengths)
+	local delta=Vector3.new(attackerRoot.Position.X-root.Position.X,0,attackerRoot.Position.Z-root.Position.Z)
+	if delta.Magnitude&lt;0.1 then return nil end
+	local toward=delta.Unit; local side=Vector3.new(-toward.Z,0,toward.X)
+	for _,sign in ipairs({brain.Side,-brain.Side}) do
+		local direction=side*sign
+		if lowHealth then direction=(direction-toward*0.6).Unit end
+		local safe=true
+		for _,length in ipairs(lengths) do
+			if not safeLocalMove(root,root.Position+direction*length,targetChar) then safe=false; break end
+		end
+		if safe then brain.Side=sign; return direction end
+	end
+	return nil
+end
+local function nativeDash(hum,root,targetRoot,distance,clear)
+	if elapsedTime&lt;brain.DashRetry or elapsedTime&lt;brain.NextAt or elapsedTime&lt;brain.StillUntil then return false end
+	local char=body(LocalPlayer)
+	if char:GetAttribute("canDash")==false or char:GetAttribute("busy")==true or char:GetAttribute("canRun")==false then return false end
+	local item=find(dashNames)
+	if not item or not ready(item) then return false end
+	local threat=activeThreat()
+	local evading=threat~=nil or clear and elapsedTime-brain.HitAt&lt;0.65 and distance&lt;=16
+	local gap=clear and distance&gt;=brain.GapRange and distance&lt;=65 and not brain.Threat and not brain.ClosingPursuer and not brain.Chaser
+	if not gap and not evading then return false end
+	local cooldown=numberAttribute(item.Button,"CooldownDuration",2.5,0.4,30)
+	if elapsedTime-brain.DashAt&lt;cooldown-1e-6 then return false end
+	local attackerRoot=threat and threat.Root or targetRoot
+	local delta=Vector3.new(attackerRoot.Position.X-root.Position.X,0,attackerRoot.Position.Z-root.Position.Z)
+	if delta.Magnitude&lt;0.1 then return false end
+	local direction=delta.Unit
+	if evading then direction=safeDodge(root,attackerRoot,body(threat and threat.Player or API.Target),hum.Health/math.max(hum.MaxHealth,1)&lt;0.35,{3,6,9}); if not direction then return false end end
+	-- Check several points along the initial dash direction; never add custom velocity/teleports.
+	local targetChar=body(API.Target)
+	for _,length in ipairs({3,6,9}) do if not safeLocalMove(root,root.Position+direction*length,targetChar) then return false end end
+	haltWalking(hum,root)
+	local moved=pcall(function() hum:Move(direction,false) end)
+	if moved then brain.MoveInput=hum; brain.DashDirection=direction end
+	brain.Steering=nil
+	local ok=fire(item)
+	brain.DashRetry=elapsedTime+0.4
+	if not ok then if moved then hum:Move(Vector3.new(),false); brain.MoveInput=nil end; return false end
+	brain.DashAt=elapsedTime; brain.NextAt=elapsedTime+numberAttribute(item.Button,"RecoveryTime",0.3,0.1,2)
+	brain.StillUntil=brain.NextAt; brain.MoveGoal=nil; brain.MoveAt=0
+	brain.GapRange=roll(20,26)
+	if evading then brain.Threat=nil; brain.DefenseGoal=nil end
+	status(evading and "Dodging" or "Closing distance")
+	return true
+end
+local function trackMovement(hum,root,distance,dt)
+	local progress=brain.LastPosition and (root.Position-brain.LastPosition).Magnitude or 1
+	local goal=walkGoal
+	local intendsTravel=distance&gt;13 or goal and (goal-root.Position).Magnitude&gt;4
+	local minimumProgress=math.min(0.12,math.max(0.025,(hum.WalkSpeed or 16)*dt*0.15))
+	if intendsTravel and walker and progress&lt;minimumProgress then brain.Stuck+=dt else brain.Stuck=0 end
+	brain.LastPosition=root.Position
+	if brain.Stuck&gt;1.2 then
+		routeTimer=math.max(routeTimer,1.2); brain.ModeUntil=0; brain.ModeCheckAt=elapsedTime+1
+		brain.ModeGoal=nil; brain.FaceRoot=nil; brain.FaceTravel=false; brain.SuppressAttack=false; brain.Chaser=nil; brain.Mode="path"
+	end
+	if brain.Stuck&gt;3 then unreachable[API.Target]=elapsedTime+4; reset(); status("Finding another route") end
+end
+local function tacticalMove(hum,root,targetRoot,targetChar,distance,clear,dt)
+	if elapsedTime&lt;brain.StillUntil then if not brain.MoveInput then haltWalking(hum,root) end; return end
+	if brain.MoveInput then pcall(function() hum:Move(Vector3.new(),false) end); brain.MoveInput=nil end
+	local threat=activeThreat()
+	if threat then
+		if not brain.DefenseGoal then
+			local direction=safeDodge(root,threat.Root,body(threat.Player),hum.Health/math.max(hum.MaxHealth,1)&lt;0.35,{2,4})
+			if direction then brain.DefenseGoal=root.Position+direction*roll(3.0,4.0) end
+		end
+		if brain.DefenseGoal then walkTo(hum,brain.DefenseGoal); brain.Stuck=0; brain.LastPosition=root.Position; return end
+	end
+	if brain.Stuck&lt;1.2 and movementPattern(hum,root,targetRoot,targetChar,distance,clear) then trackMovement(hum,root,distance,dt); return end
+	if distance&gt;13 or not clear then
+		local lead=targetRoot.AssemblyLinearVelocity*0.15
+		if lead.Magnitude&gt;5 then lead=lead.Unit*5 end
+		local goal=targetRoot.Position+lead
+		local direct=clear and brain.Stuck&lt;1.2 and floorSafe(goal) and floorSafe((root.Position+goal)*0.5)
+		chase(hum,root,targetRoot,direct,dt,goal)
+	else
+		if elapsedTime&gt;=brain.MoveAt or not brain.MoveGoal then
+			brain.MoveAt=elapsedTime+roll(0.40,0.78)
+			if elapsedTime&gt;=brain.SideUntil then
+				if math.random()&lt;0.7 then brain.Side*=-1 end
+				brain.SideUntil=elapsedTime+roll(1.1,2.4)
+			end
+			local delta=Vector3.new(targetRoot.Position.X-root.Position.X,0,targetRoot.Position.Z-root.Position.Z)
+			if delta.Magnitude&gt;0.1 then
+				local toward=delta.Unit; local side=Vector3.new(-toward.Z,0,toward.X)
+				local sign=brain.Side
+				local lateral=elapsedTime-brain.HitAt&lt;1 and roll(2.1,3.3) or roll(0.8,2.1)
+				local spacing=desiredSpacing(hum,distance)
+				local goal=targetRoot.Position-toward*spacing+side*(lateral*sign)
+				if not safeLocalMove(root,goal,targetChar) then goal=targetRoot.Position-toward*spacing-side*(lateral*sign) end
+				brain.MoveGoal=safeLocalMove(root,goal,targetChar) and goal or root.Position
+			else brain.MoveGoal=root.Position end
+		end
+		walkTo(hum,brain.MoveGoal)
+	end
+	trackMovement(hum,root,distance,dt)
+end
+local function combo(hum,root,distance,screen)
+	if elapsedTime&lt;brain.NextAt then status(brain.Cast and "Finishing skill" or "Recovering"); return end
+	if brain.SuppressAttack then status("Turning to check pursuer"); return end
+	local char=body(LocalPlayer)
+	if (char:GetAttribute("busy")==true or char:GetAttribute("canAttack")==false) and char:GetAttribute("CancelWindow")~=true then status("Waiting for attack recovery"); return end
+	local targetChar=body(API.Target)
+	if targetChar and targetChar:GetAttribute("iframes")==true then status("Waiting for target vulnerability"); return end
+	local item,index,count=chooseSkill(distance)
+	local basic=find(attackNames)
+	local chainLength=basic and numberAttribute(basic.Button,"ComboLength",3,1,5) or 3
+	local canLink=brain.Melee==0 or brain.Melee&gt;=chainLength or distance&gt;8 or char:GetAttribute("CancelWindow")==true
+	-- Several ready skills must not starve punches forever at close range.
+	if basic and distance&lt;=8 and brain.SkillStreak&gt;=2 and char:GetAttribute("CancelWindow")~=true then canLink=false end
+	if item and canLink and brain.StableAim&gt;=0.08 then
+		local ok,err=fire(item)
+		if ok then
+			local b=item.Button
+			local cast=numberAttribute(b,"CastTime",0.18,0.03,8)
+			local channel=numberAttribute(b,"ChannelTime",0,0,15)
+			local recovery=numberAttribute(b,"RecoveryTime",0.22,0.04,4)
+			local id=b or item.Action
+			local plan=skillPlan(item)
+			API.LastCast={Distance=distance,Trigger=plan.Trigger,Low=plan.Low,High=plan.High}
+			lastUsed[id]=elapsedTime; brain.Plans[id]=nil
+			brain.NextAt=elapsedTime+cast+channel+recovery+roll(0,0.06)
+			brain.StillUntil=(b and b:GetAttribute("StopToCast")==true or channel&gt;0) and elapsedTime+cast+channel or 0
+			brain.Cast=item; brain.Index=index%count+1; brain.Melee=0; brain.SkillStreak+=1
+			if brain.StillUntil&gt;elapsedTime then brain.Stuck=0; brain.LastPosition=root.Position; haltWalking(hum,root) end
+			status("Skill requested"); return
+		else brain.NextAt=elapsedTime+0.3; status(err); return end
+	end
+	brain.Cast=nil
+	if distance&lt;=8 then
+		local ok,err=primary(screen)
+		if not ok then brain.NextAt=elapsedTime+0.5; status(err or "Attack input unavailable"); return end
+		brain.Melee+=1
+		local basic=find(attackNames)
+		local length=basic and numberAttribute(basic.Button,"ComboLength",3,1,5) or 3
+		local spacing=basic and numberAttribute(basic.Button,"AttackInterval",0.36,0.15,2) or 0.36
+		brain.NextAt=elapsedTime+(brain.Melee&gt;=length and math.max(0.5,spacing) or spacing)+roll(0,0.035)
+		if brain.Melee&gt;=length then brain.Melee=0; brain.SkillStreak=0; brain.Spacing=roll(4.2,6.1) end
+		status("Melee combo")
+	else
+		if not basic and #orderedSkills()==0 then status("No attack/skill buttons detected")
+		else status("Positioning for next ability") end
+	end
+end
+
+function API.Step(dt)
+	dt=math.clamp(tonumber(dt) or 0,0,0.1); accumulator+=dt
+	if accumulator&lt;0.1 then return end; local elapsed=accumulator; accumulator=0; elapsedTime+=elapsed
+	if not live() then reset(); if API.Enabled then status(dragging and "Paused while moving panel" or "Paused") end; return end
+	local char,hum,root=body(LocalPlayer)
+	if not root or root.Anchored or hum.PlatformStand then reset(); status("Waiting for your character…"); return end
+	if char:GetAttribute("MorphAppearanceReady")==false then reset(); status("Waiting for hero"); return end
+	controlAge+=elapsed; if controlAge&gt;=0.75 then scan() end
+	local camera=workspace.CurrentCamera
+	if not camera or camera.CameraType==Enum.CameraType.Scriptable or char:GetAttribute("cutsceneLock")==true or char:GetAttribute("inArena")==false then reset(); status("Waiting for the arena"); return end
+	local target=selectTarget(root)
+	if target~=API.Target then
+		local old=API.Target; reset(); API.Target=target
+		targetPolicy.HoldUntil=elapsedTime+roll(1.6,2.8); targetPolicy.ReviewAt=targetPolicy.HoldUntil
+		targetPolicy.Previous=old; targetPolicy.PreviousUntil=elapsedTime+3.5; targetPolicy.LastSwitch=elapsedTime
+		if not old then targetPolicy.GroupSince=nil end
+	end
+	local targetChar,_,targetRoot=body(target)
+	if not targetRoot then stopMotion(); status("Looking for a target…"); return end
+	if sessionRoot~=root or sessionTargetRoot~=targetRoot then reset(); API.Target=target; sessionRoot=root; sessionTargetRoot=targetRoot end
+	local heroKey=normalize(char:GetAttribute("MorphCurrent") or char:GetAttribute("power"))
+	if brain.HeroKey~=heroKey then brain.HeroKey=heroKey; lastUsed=setmetatable({},{__mode="k"}); brain.Plans={}; brain.Index=1; brain.Melee=0; brain.SkillStreak=0; brain.NextAt=elapsedTime+0.25; scan() end
+	if rotationHumanoid~=hum then stopMotion(); rotationHumanoid=hum; oldAutoRotate=hum.AutoRotate end
+	hum.AutoRotate=false
+	if brain.LastHealth and hum.Health&lt;brain.LastHealth then brain.HitAt=elapsedTime end
+	brain.LastHealth=hum.Health
+	observeThreats(root)
+	brain.ClosingPursuer=pursuer(root,targetRoot)
+	local distance=(targetRoot.Position-root.Position).Magnitude
+	local clear=lineOfSight(root.Position,targetRoot.Position,targetChar)
+	if char:GetAttribute("canRun")==false then haltWalking(hum,root)
+	else
+		if nativeDash(hum,root,targetRoot,distance,clear) then return end
+		tacticalMove(hum,root,targetRoot,targetChar,distance,clear,elapsed)
+		if API.Target~=target then return end
+	end
+	if char:GetAttribute("canRun")==false and distance&gt;8 then status("Game has movement locked (canRun=false)"); return end
+	local item=chooseSkill(distance); brain.AimSkill=item
+	local point=aimPoint(targetRoot)
+	local vector=point-camera.CFrame.Position
+	local screen,onScreen=camera:WorldToViewportPoint(point)
+	local aligned=vector.Magnitude&gt;0.1 and camera.CFrame.LookVector:Dot(vector.Unit)&gt;=0.992
+	local flat=Vector3.new(targetRoot.Position.X-root.Position.X,0,targetRoot.Position.Z-root.Position.Z)
+	local facing=flat.Magnitude&lt;=0.1 or root.CFrame.LookVector:Dot(flat.Unit)&gt;=0.90
+	if not clear or not onScreen or screen.Z&lt;=0 or not aligned or not facing or not lineOfSight(camera.CFrame.Position,targetRoot.Position,targetChar) then brain.StableAim=0; status("Approaching @"..target.Name); return end
+	brain.StableAim+=elapsed
+	combo(hum,root,distance,screen)
+end
+local function faceBody(dt)
+	if not live() then return end
+	local _,_,root=body(LocalPlayer); local _,_,targetRoot=body(API.Target)
+	if not root or not targetRoot or root.Anchored then return end
+	local face=brain.FaceRoot and brain.FaceRoot.Parent and brain.FaceRoot or targetRoot
+	local point=brain.FaceTravel and walkGoal or face.Position
+	point=point and Vector3.new(point.X,root.Position.Y,point.Z)
+	if point and (point-root.Position).Magnitude&gt;0.1 then
+		root.CFrame=root.CFrame:Lerp(CFrame.lookAt(root.Position,point),1-math.exp(-16*math.clamp(tonumber(dt) or 1/60,0,0.1)))
+	end
+end
+local function steer(dt)
+	if not live() then return end
+	local _,hum,root=body(LocalPlayer)
+	if not root or root.Anchored or hum.PlatformStand then return end
+	-- ControlModule can send Move(Vector3.zero) every frame and cancel MoveTo.
+	-- Reapply only our walking direction after that update; retain normal WalkSpeed.
+	if walker==hum and walkGoal then
+		local delta=Vector3.new(walkGoal.X-root.Position.X,0,walkGoal.Z-root.Position.Z)
+		local desired=delta.Magnitude&gt;0.7 and delta.Unit or Vector3.new()
+		local old=brain.Steering or Vector3.new()
+		brain.Steering=old+(desired-old)*(1-math.exp(-28*math.clamp(tonumber(dt) or 1/60,0,0.1)))
+		hum:Move(brain.Steering,false)
+	elseif brain.MoveInput==hum and brain.DashDirection then hum:Move(brain.DashDirection,false) end
+end
+local function guarded(fn,...)
+	local ok,err=pcall(fn,...)
+	if ok then return end
+	API.LastError=tostring(err)
+	pcall(API.SetEnabled,false); pcall(restoreControls); pcall(releaseAll)
+	status("Stopped: "..API.LastError:match("[^\n]+"))
+	warn("[Rift Auto Play] "..API.LastError)
+end
+local step=API.Step
+function API.Step(dt) guarded(step,dt) end
+function API.Unload()
+	if not alive then return end
+	API.SetEnabled(false); alive=false
+	Run:UnbindFromRenderStep("RiftAutoPlayAim")
+	for _,c in ipairs(connections) do c:Disconnect() end; table.clear(connections)
+	gui:Destroy()
+	if env.SuperheroArenaHub==API then env.SuperheroArenaHub=nil end
+end
+local panel=create("Frame",{Name="Panel",AnchorPoint=Vector2.new(0.5,0),Position=UDim2.new(0.5,0,0,34),Size=UDim2.fromOffset(266,128),BackgroundColor3=Color3.fromRGB(22,24,28),BorderSizePixel=0},gui)
+create("UICorner",{CornerRadius=UDim.new(0,12)},panel)
+create("UIStroke",{Color=Color3.fromRGB(54,57,63),Thickness=1},panel)
+local title=create("TextLabel",{Name="Handle",Active=true,Position=UDim2.fromOffset(14,8),Size=UDim2.new(1,-60,0,26),BackgroundTransparency=1,Text="RIFT · AUTO PLAY",Font=Enum.Font.GothamBold,TextSize=12,TextColor3=Color3.fromRGB(235,232,224),TextXAlignment=Enum.TextXAlignment.Left},panel)
+local close=create("TextButton",{Position=UDim2.new(1,-38,0,8),Size=UDim2.fromOffset(26,26),Text="×",Font=Enum.Font.Gotham,TextSize=19,TextColor3=Color3.fromRGB(172,174,183),BackgroundTransparency=1,AutoButtonColor=false},panel)
+playButton=create("TextButton",{Name="Play",Position=UDim2.fromOffset(14,42),Size=UDim2.new(1,-28,0,40),Text="PLAY",Font=Enum.Font.GothamBold,TextSize=14,TextColor3=Color3.fromRGB(240,240,230),BackgroundColor3=Color3.fromRGB(72,91,68),BorderSizePixel=0,AutoButtonColor=false},panel)
+create("UICorner",{CornerRadius=UDim.new(0,8)},playButton)
+statusLabel=create("TextLabel",{Name="Status",Position=UDim2.fromOffset(14,87),Size=UDim2.new(1,-28,0,32),BackgroundTransparency=1,Text="Off",Font=Enum.Font.Gotham,TextSize=10,TextColor3=Color3.fromRGB(164,168,177),TextWrapped=true},panel)
+connect(playButton.Activated,function() guarded(API.SetEnabled,not API.Enabled) end)
+connect(close.Activated,API.Unload)
+local drag
+connect(title.InputBegan,function(input)
+	if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then
+		drag={Input=input,Start=input.Position,Origin=panel.Position}; dragging=true; reset()
+	end
+end)
+connect(Input.InputChanged,function(input)
+	if drag and (input==drag.Input or input.UserInputType==Enum.UserInputType.MouseMovement and drag.Input.UserInputType==Enum.UserInputType.MouseButton1) then
+		local camera=workspace.CurrentCamera; if not camera then return end
+		local view=camera.ViewportSize; local delta=input.Position-drag.Start
+		local width=math.min(266,math.max(1,view.X-16)); local height=math.min(128,math.max(1,view.Y-16))
+		local x=drag.Origin.X.Scale*view.X+drag.Origin.X.Offset+delta.X
+		local y=drag.Origin.Y.Scale*view.Y+drag.Origin.Y.Offset+delta.Y
+		panel.Position=UDim2.fromOffset(math.clamp(x,width/2+8,view.X-width/2-8),math.clamp(y,8,view.Y-height-8))
+	end
+end)
+connect(Input.InputEnded,function(input) if drag and input==drag.Input then drag=nil; dragging=false end end)
+connect(Input.WindowFocusReleased,function() focused=false; drag=nil; dragging=false; reset() end)
+connect(Input.WindowFocused,function() focused=true end)
+connect(Players.PlayerRemoving,function(plr) if API.Target==plr then reset() end end)
+connect(gui.Destroying,function() if alive then API.Unload() end end)
+local lastView
+connect(Run.RenderStepped,function()
+	local camera=workspace.CurrentCamera; if not camera or camera.ViewportSize==lastView then return end
+	lastView=camera.ViewportSize
+	panel.Size=UDim2.fromOffset(math.min(266,math.max(1,lastView.X-16)),128)
+	panel.Position=UDim2.new(0.5,0,0,math.min(34,math.max(8,lastView.Y-136)))
+end)
+connect(Run.Heartbeat,API.Step)
+Run:BindToRenderStep("RiftAutoPlayAim",Enum.RenderPriority.Camera.Value+1,function(dt)
+	guarded(function() steer(dt); faceBody(dt); aim(dt) end)
+end)
+API.Gui=gui
+API.RefreshControls=scan
+API.Aim=aim
+env.SuperheroArenaHub=API
+return API
+</textarea></main>
+<script>
+const source = document.getElementById('source');
+const status = document.getElementById('status');
+const copy = document.getElementById('copy');
+const download = document.getElementById('download');
+let downloadUrl = null;
+let edited = false;
+function fitEditor() {
+  source.style.height = 'auto';
+  source.style.height = (source.scrollHeight + 2) + 'px';
+}
+function selectAll() {
+  source.focus();
+  source.select();
+  source.setSelectionRange(0, source.value.length);
+  status.textContent = 'All current code selected. Choose Copy from your device’s selection menu.';
+}
+document.getElementById('select').addEventListener('click', selectAll);
+source.addEventListener('input', () => {
+  edited = true;
+  fitEditor();
+  status.textContent = 'Edited. Copy or download to keep your changes; this page does not save automatically.';
+});
+source.addEventListener('keydown', event => {
+  if (event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault();
+    source.setRangeText('	', source.selectionStart, source.selectionEnd, 'end');
+    source.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+});
+function fallbackCopy(code) {
+  const area = document.createElement('textarea');
+  area.value = code;
+  area.readOnly = true;
+  area.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+  document.body.appendChild(area);
+  area.focus();
+  area.select();
+  area.setSelectionRange(0, area.value.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (error) {}
+  area.remove();
+  return ok;
+}
+document.getElementById('reportCopy').addEventListener('click', async () => {
+  const report = document.getElementById('reportSource');
+  let ok = false;
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(report.value); ok = true; } catch (error) {}
+  }
+  if (!ok) ok = fallbackCopy(report.value);
+  if (!ok) { report.focus(); report.select(); report.setSelectionRange(0, report.value.length); }
+  status.textContent = ok ? 'Report script copied. Execute it AFTER the hub, then paste the resulting report into the chat.' : 'Report script selected. Choose Copy from your selection menu.';
+});
+copy.addEventListener('click', async () => {
+  const code = source.value;
+  let ok = false;
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(code); ok = true; } catch (error) {}
+  }
+  if (!ok) ok = fallbackCopy(code);
+  if (ok) {
+    copy.textContent = 'Copied!';
+    status.textContent = 'Current Lua code copied, including your edits. Paste it into Delta.';
+    setTimeout(() => { copy.textContent = 'Copy all code'; }, 2000);
+  } else {
+    selectAll();
+    status.textContent = 'Clipboard access was blocked. Your current code is selected; choose Copy from the selection menu.';
+  }
+});
+function updateDownload() {
+  if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+  downloadUrl = URL.createObjectURL(new Blob([source.value], { type: 'text/plain;charset=utf-8' }));
+  download.href = downloadUrl;
+}
+download.addEventListener('click', () => {
+  updateDownload();
+  status.textContent = 'Downloading the current Lua code, including your edits.';
+});
+window.addEventListener('resize', fitEditor);
+window.addEventListener('beforeunload', event => {
+  if (edited) { event.preventDefault(); event.returnValue = ''; }
+});
+updateDownload();
+fitEditor();
+</script>
+</body>
+</html>
