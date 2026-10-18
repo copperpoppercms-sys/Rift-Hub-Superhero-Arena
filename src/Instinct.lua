@@ -1,7 +1,7 @@
--- Short native-movement defense. No teleport, custom velocity or cooldown bypass. Optional short WalkSpeed bursts restore owned changes.
+-- Detected-attack escapes: one local teleport by default, with an optional walking/native mode.
 return function(ctx)
     local Players=game:GetService("Players")
-    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,SpeedBursts=0,LastSpeedResult="No burst",BurstRejected=false,ThreatPending=false,LocalBlockReason="None",LastAutoDash="Not attempted",LastTestDash="Not attempted",LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
+    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,Teleports=0,SpeedBursts=0,LastSpeedResult="No burst",BurstRejected=false,ThreatPending=false,LocalBlockReason="None",LastAutoDash="Not attempted",LastTestDash="Not attempted",LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
     local records,tracked,pending={},{ },{}
     local clock,age,retry,holdUntil=0,0,0,0
     local enabled,dead=false,false
@@ -48,7 +48,7 @@ return function(ctx)
             "Character movement gate: "..M.LocalBlockReason,
             "Last automatic dash: "..M.LastAutoDash.." | last dash test: "..M.LastTestDash,
             "Speed bursts: "..M.SpeedBursts.." | configured speed="..ctx.Config.InstinctBurstSpeed.." | last requested="..tostring(M.LastBurstSpeed).." | "..M.LastSpeedResult,
-            "Movement requests: native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
+            "Movement requests: teleports="..M.Teleports..", native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
             "Movement observation: "..M.Motion.." | last observed travel="..tostring(M.LastObservedTravel),
             "Manual movement present: "..tostring(ctx.ManualMovement()).." | last assist window="..tostring(M.LastAssistWindow).." seconds (up to 0.5; changed input cancels)","Rejected destinations:"}
@@ -57,6 +57,7 @@ return function(ctx)
         if M.EncounterStart then
             table.insert(lines,"Since encounter recording started: automatic="..(M.AutomaticMoves-M.EncounterStart.Auto)..", tests="..(M.TestMoves-M.EncounterStart.Tests)..", cues="..(M.Cues-M.EncounterStart.Cues))
         end
+        table.insert(lines,"Teleport mode: "..tostring(ctx.Config.TeleportDodge).." (local request; server acceptance unverified)")
         table.insert(lines,"Enabled: "..tostring(ctx.Config.UltraInstinct).." | cue range="..ctx.Config.InstinctRange.." | walking destination cap="..ctx.Config.InstinctMaxDistance)
         local canRun,pause=ctx.CanRun();table.insert(lines,"Input/camera context ready: "..tostring(canRun).." | "..tostring(pause))
         local char,hum,root=ctx.Body(Players.LocalPlayer)
@@ -313,17 +314,19 @@ return function(ctx)
         fields()
         return record
     end
-    local function movementBlock(char,hum,root)
+    local function movementBlock(char,hum,root,teleport)
         if not root or not char or not hum then return "Character not ready" end
+        if root.Anchored then return "Root is anchored" end
+        if char:GetAttribute("inArena")==false then return "Outside arena" end
+        if char:GetAttribute("MorphAppearanceReady")==false then return "Hero not ready" end
+        -- Teleport requests do not depend on walking inputs; this does not clear or defeat game locks.
+        if teleport then return nil end
         if char:GetAttribute("LOCKED_INPUTS")==true then return "Game locked inputs (LOCKED_INPUTS=true)" end
         if char:GetAttribute("cutsceneLock")==true then return "Game cutscene/ability lock (cutsceneLock=true)" end
         if char:GetAttribute("canRun")==false then return "Game locked movement (canRun=false)" end
-        if root.Anchored then return "Root is anchored" end
         if hum.PlatformStand then return "Character is in PlatformStand" end
-        if char:GetAttribute("inArena")==false then return "Outside arena" end
-        if char:GetAttribute("MorphAppearanceReady")==false then return "Hero not ready" end
     end
-    local function eligible(char,hum,root) return movementBlock(char,hum,root)==nil end
+    local function eligible(char,hum,root,teleport) return movementBlock(char,hum,root,teleport)==nil end
     local function geometry(part,root)
         local ok,value=pcall(function()
             local cf=part.CFrame;local size=part.Size
@@ -374,8 +377,23 @@ return function(ctx)
         local offset=Vector3.new(goal.X-root.Position.X,0,goal.Z-root.Position.Z);local distance=offset.Magnitude
         if distance<0.2 or distance>ctx.Config.InstinctMaxDistance+0.001 then return false end
         local char,hum,current=ctx.Body(Players.LocalPlayer)
-        if current~=root or not eligible(char,hum,root) then M.LastBlock="Movement unavailable";return false end
+        local teleport=ctx.Config.TeleportDodge and not nativeOnly
+        if current~=root or not eligible(char,hum,root,teleport) then M.LastBlock="Movement unavailable";return false end
         M.Stop()
+        if teleport then
+            local start=root.Position
+            local ok,err=pcall(function() root.CFrame=root.CFrame+(goal-start) end)
+            if not ok then M.LastBlock="Teleport write failed: "..tostring(err);return false,M.LastBlock end
+            probe={Root=root,Start=start,Goal=goal,At=clock,Direction=offset.Unit,Distance=distance}
+            M.Reactions+=1;M.Teleports+=1
+            if manual then M.TestMoves+=1 else M.AutomaticMoves+=1;M.LastCue=reason;M.LastAutoDash="Not used: teleport mode" end
+            M.LastMode="Local teleport request · damage bounds estimated"
+            M.LastDistance=distance;M.LastDestination=goal;M.LastBlock="None";M.LastAssistWindow=0
+            M.Motion="Teleport requested; waiting for displacement observation"
+            M.Status=M.LastMode;M.Dodging=true;holdUntil=clock+0.12;retry=clock+0.25
+            log("Teleport request distance="..string.format("%.2f",distance).." cue="..reason)
+            return true
+        end
         local speed=tonumber(hum.WalkSpeed) or 0
         if speed<=0 then M.LastBlock="Normal walking speed is zero";return false end
         local direction=offset.Unit
@@ -417,10 +435,10 @@ return function(ctx)
     function M.TestDodge(nativeOnly)
         if dead or not ctx.CanRun() then return false,"Paused: close typing or dragging first" end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        if not eligible(char,hum,root) then M.LastBlock=movementBlock(char,hum,root) or "Character cannot move";return false,M.LastBlock end
+        if not eligible(char,hum,root,ctx.Config.TeleportDodge and not nativeOnly) then M.LastBlock=movementBlock(char,hum,root,ctx.Config.TeleportDodge and not nativeOnly) or "Character cannot move";return false,M.LastBlock end
         local boxes=nearby(root)
         for i=0,7 do
-            local angle=i*math.pi/4;local goal=root.Position+Vector3.new(math.cos(angle),0,math.sin(angle))*math.min(nativeOnly and 9 or 4,ctx.Config.InstinctMaxDistance)
+            local angle=i*math.pi/4;local goal=root.Position+Vector3.new(math.cos(angle),0,math.sin(angle))*math.min(nativeOnly and 9 or ctx.Config.TeleportDodge and ctx.Config.InstinctMaxDistance or 4,ctx.Config.InstinctMaxDistance)
             local outside=true;for _,box in ipairs(boxes) do if inside(box,goal) then outside=false;break end end
             if outside and safe(root,goal,nil,boxes) then return execute(root,goal,"Manual test (not attack detection)","Test dodge button",true,boxes,nativeOnly) end
         end
@@ -464,8 +482,9 @@ return function(ctx)
         local canRun,pause=ctx.CanRun()
         if not canRun then M.Stop();M.Status="Paused: "..(pause or "input or camera");return end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        local blocked=movementBlock(char,hum,root)
-        M.LocalBlockReason=blocked or "None";M.BurstRejected=burstBlockedRoot~=nil and burstBlockedRoot==root
+        local blocked=movementBlock(char,hum,root,ctx.Config.TeleportDodge)
+        local walkingLocked=ctx.Config.TeleportDodge and (char and (char:GetAttribute("LOCKED_INPUTS")==true or char:GetAttribute("cutsceneLock")==true or char:GetAttribute("canRun")==false))
+        M.LocalBlockReason=blocked or (walkingLocked and "Walking inputs locked; local teleport can only be attempted" or "None");M.BurstRejected=burstBlockedRoot~=nil and burstBlockedRoot==root
         if not root then M.Stop();M.Status=blocked or "Character not ready";return end
         if motion and not blocked then M.Steer(dt);if motion then return end end
         if age<0.025 then return end;age=0
@@ -555,7 +574,7 @@ return function(ctx)
             candidates={(side-toward*0.5).Unit,(side*(-1)-toward*0.5).Unit,side,side*(-1),toward*(-1)}
         end
         local reason=bestRecord.Cue.Reason
-        local preferred=math.min(bestRecord.Cue.Ability and 10 or 8,ctx.Config.InstinctMaxDistance)
+        local preferred=ctx.Config.TeleportDodge and ctx.Config.InstinctMaxDistance or math.min(bestRecord.Cue.Ability and 10 or 8,ctx.Config.InstinctMaxDistance)
         for _,length in ipairs({preferred,8,6,4,3}) do
             if length<=ctx.Config.InstinctMaxDistance then
                 for _,direction in ipairs(candidates) do

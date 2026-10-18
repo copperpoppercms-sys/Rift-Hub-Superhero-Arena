@@ -12,10 +12,10 @@
 </head>
 <body>
 <header>
-<div class="bar"><div><h1>RIFT HUB / SUPERHERO ARENA · v5.8</h1><p>Animated UI · Combat + Visuals · Full editable Lua</p></div><div class="actions"><button id="copy" type="button">Copy all code</button><button id="select" type="button">Select all</button><a id="download" href="#" download="RiftHub_SuperheroArena.lua">Download .lua</a></div></div>
+<div class="bar"><div><h1>RIFT HUB / SUPERHERO ARENA · v5.9</h1><p>Animated UI · Combat + Visuals · Full editable Lua</p></div><div class="actions"><button id="copy" type="button">Copy all code</button><button id="select" type="button">Select all</button><a id="download" href="#" download="RiftHub_SuperheroArena.lua">Download .lua</a></div></div>
 <div id="status" role="status" aria-live="polite">Edit the code below, then copy or download your version.</div>
 </header>
-<main><p class="note">Tap anywhere in the code to type or edit. Copy all code and Download .lua use your latest edits. Download your edited file to keep your changes.</p><details><summary>Copy a controls, role and defense report</summary><p>For a missed dodge: when your character can move normally, use Combat → Test game dash to isolate native dash input without a speed burst. Enable Ultra Instinct, tap Record nearby attacks, encounter one nearby attack, then tap Copy dodge report. Test sidestep uses the configured local burst when Fast sidestep is on, otherwise ordinary walking. It does not teleport or request a native dash. For the general controls and roles report, use the read-only snippet below.</p><button id="reportCopy" type="button">Copy control report script</button><textarea id="reportSource" aria-label="Control report script" readonly spellcheck="false" rows="16" style="display:block;width:100%;margin:12px 0;background:#17191d;color:#e0e3eb">-- Run AFTER the full hub, while your hero's combat HUD is visible.
+<main><p class="note">Tap anywhere in the code to type or edit. Copy all code and Download .lua use your latest edits. Download your edited file to keep your changes.</p><details><summary>Copy a controls, role and defense report</summary><p>For a missed dodge: teleport mode is selected by default. Use Combat → Test teleport to preview a capped local relocation. Enable Ultra Instinct, tap Record nearby attacks, encounter one nearby attack, then tap Copy dodge report. Test teleport previews the selected local teleport mode. Turn Teleport dodge off to expose walking/native controls and their separate tests. Server acceptance and avoidance of every ability are not guaranteed. For the general controls and roles report, use the read-only snippet below.</p><button id="reportCopy" type="button">Copy control report script</button><textarea id="reportSource" aria-label="Control report script" readonly spellcheck="false" rows="16" style="display:block;width:100%;margin:12px 0;background:#17191d;color:#e0e3eb">-- Run AFTER the full hub, while your hero's combat HUD is visible.
 local e = type(getgenv) == "function" and getgenv() or _G
 local h = e.SuperheroArenaHub
 if type(h) ~= "table" or type(h.Diagnostics) ~= "function" then
@@ -94,9 +94,9 @@ return function(url)
 end
 end)()("https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/assets/rift_logo.jpg")
 local function normalize(value) return type(value)=="string" and value:lower():gsub("[^%w]","") or "" end
-local API={Game="Superhero Arena",Version="5.8",Enabled=false,Target=nil,Status="Off"}
+local API={Game="Superhero Arena",Version="5.9",Enabled=false,Target=nil,Status="Off"}
 local Config={ESP=true,Chams=true,Names=true,Roles=true,ChamOpacity=0.45,GuessRoles=true,
-    UltraInstinct=false,InstinctRange=16,InstinctMaxDistance=10,FastSidestep=true,InstinctBurstSpeed=64,ReduceMotion=false}
+    UltraInstinct=false,TeleportDodge=true,InstinctRange=24,InstinctMaxDistance=12,FastSidestep=true,InstinctBurstSpeed=64,ReduceMotion=false}
 API.Config=Config
 local featureCleanup={}
 local gui=create("ScreenGui",{Name="RiftAutoPlay",ResetOnSpawn=false,IgnoreGuiInset=true,DisplayOrder=900},nil)
@@ -1280,10 +1280,10 @@ return function(ctx)
 end
 end)()
 local MakeInstinct=(function()
--- Short native-movement defense. No teleport, custom velocity or cooldown bypass. Optional short WalkSpeed bursts restore owned changes.
+-- Detected-attack escapes: one local teleport by default, with an optional walking/native mode.
 return function(ctx)
     local Players=game:GetService("Players")
-    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,SpeedBursts=0,LastSpeedResult="No burst",BurstRejected=false,ThreatPending=false,LocalBlockReason="None",LastAutoDash="Not attempted",LastTestDash="Not attempted",LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
+    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,Teleports=0,SpeedBursts=0,LastSpeedResult="No burst",BurstRejected=false,ThreatPending=false,LocalBlockReason="None",LastAutoDash="Not attempted",LastTestDash="Not attempted",LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
     local records,tracked,pending={},{ },{}
     local clock,age,retry,holdUntil=0,0,0,0
     local enabled,dead=false,false
@@ -1330,7 +1330,7 @@ return function(ctx)
             "Character movement gate: "..M.LocalBlockReason,
             "Last automatic dash: "..M.LastAutoDash.." | last dash test: "..M.LastTestDash,
             "Speed bursts: "..M.SpeedBursts.." | configured speed="..ctx.Config.InstinctBurstSpeed.." | last requested="..tostring(M.LastBurstSpeed).." | "..M.LastSpeedResult,
-            "Movement requests: native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
+            "Movement requests: teleports="..M.Teleports..", native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
             "Movement observation: "..M.Motion.." | last observed travel="..tostring(M.LastObservedTravel),
             "Manual movement present: "..tostring(ctx.ManualMovement()).." | last assist window="..tostring(M.LastAssistWindow).." seconds (up to 0.5; changed input cancels)","Rejected destinations:"}
@@ -1339,6 +1339,7 @@ return function(ctx)
         if M.EncounterStart then
             table.insert(lines,"Since encounter recording started: automatic="..(M.AutomaticMoves-M.EncounterStart.Auto)..", tests="..(M.TestMoves-M.EncounterStart.Tests)..", cues="..(M.Cues-M.EncounterStart.Cues))
         end
+        table.insert(lines,"Teleport mode: "..tostring(ctx.Config.TeleportDodge).." (local request; server acceptance unverified)")
         table.insert(lines,"Enabled: "..tostring(ctx.Config.UltraInstinct).." | cue range="..ctx.Config.InstinctRange.." | walking destination cap="..ctx.Config.InstinctMaxDistance)
         local canRun,pause=ctx.CanRun();table.insert(lines,"Input/camera context ready: "..tostring(canRun).." | "..tostring(pause))
         local char,hum,root=ctx.Body(Players.LocalPlayer)
@@ -1595,17 +1596,19 @@ return function(ctx)
         fields()
         return record
     end
-    local function movementBlock(char,hum,root)
+    local function movementBlock(char,hum,root,teleport)
         if not root or not char or not hum then return "Character not ready" end
+        if root.Anchored then return "Root is anchored" end
+        if char:GetAttribute("inArena")==false then return "Outside arena" end
+        if char:GetAttribute("MorphAppearanceReady")==false then return "Hero not ready" end
+        -- Teleport requests do not depend on walking inputs; this does not clear or defeat game locks.
+        if teleport then return nil end
         if char:GetAttribute("LOCKED_INPUTS")==true then return "Game locked inputs (LOCKED_INPUTS=true)" end
         if char:GetAttribute("cutsceneLock")==true then return "Game cutscene/ability lock (cutsceneLock=true)" end
         if char:GetAttribute("canRun")==false then return "Game locked movement (canRun=false)" end
-        if root.Anchored then return "Root is anchored" end
         if hum.PlatformStand then return "Character is in PlatformStand" end
-        if char:GetAttribute("inArena")==false then return "Outside arena" end
-        if char:GetAttribute("MorphAppearanceReady")==false then return "Hero not ready" end
     end
-    local function eligible(char,hum,root) return movementBlock(char,hum,root)==nil end
+    local function eligible(char,hum,root,teleport) return movementBlock(char,hum,root,teleport)==nil end
     local function geometry(part,root)
         local ok,value=pcall(function()
             local cf=part.CFrame;local size=part.Size
@@ -1656,8 +1659,23 @@ return function(ctx)
         local offset=Vector3.new(goal.X-root.Position.X,0,goal.Z-root.Position.Z);local distance=offset.Magnitude
         if distance&lt;0.2 or distance&gt;ctx.Config.InstinctMaxDistance+0.001 then return false end
         local char,hum,current=ctx.Body(Players.LocalPlayer)
-        if current~=root or not eligible(char,hum,root) then M.LastBlock="Movement unavailable";return false end
+        local teleport=ctx.Config.TeleportDodge and not nativeOnly
+        if current~=root or not eligible(char,hum,root,teleport) then M.LastBlock="Movement unavailable";return false end
         M.Stop()
+        if teleport then
+            local start=root.Position
+            local ok,err=pcall(function() root.CFrame=root.CFrame+(goal-start) end)
+            if not ok then M.LastBlock="Teleport write failed: "..tostring(err);return false,M.LastBlock end
+            probe={Root=root,Start=start,Goal=goal,At=clock,Direction=offset.Unit,Distance=distance}
+            M.Reactions+=1;M.Teleports+=1
+            if manual then M.TestMoves+=1 else M.AutomaticMoves+=1;M.LastCue=reason;M.LastAutoDash="Not used: teleport mode" end
+            M.LastMode="Local teleport request · damage bounds estimated"
+            M.LastDistance=distance;M.LastDestination=goal;M.LastBlock="None";M.LastAssistWindow=0
+            M.Motion="Teleport requested; waiting for displacement observation"
+            M.Status=M.LastMode;M.Dodging=true;holdUntil=clock+0.12;retry=clock+0.25
+            log("Teleport request distance="..string.format("%.2f",distance).." cue="..reason)
+            return true
+        end
         local speed=tonumber(hum.WalkSpeed) or 0
         if speed&lt;=0 then M.LastBlock="Normal walking speed is zero";return false end
         local direction=offset.Unit
@@ -1699,10 +1717,10 @@ return function(ctx)
     function M.TestDodge(nativeOnly)
         if dead or not ctx.CanRun() then return false,"Paused: close typing or dragging first" end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        if not eligible(char,hum,root) then M.LastBlock=movementBlock(char,hum,root) or "Character cannot move";return false,M.LastBlock end
+        if not eligible(char,hum,root,ctx.Config.TeleportDodge and not nativeOnly) then M.LastBlock=movementBlock(char,hum,root,ctx.Config.TeleportDodge and not nativeOnly) or "Character cannot move";return false,M.LastBlock end
         local boxes=nearby(root)
         for i=0,7 do
-            local angle=i*math.pi/4;local goal=root.Position+Vector3.new(math.cos(angle),0,math.sin(angle))*math.min(nativeOnly and 9 or 4,ctx.Config.InstinctMaxDistance)
+            local angle=i*math.pi/4;local goal=root.Position+Vector3.new(math.cos(angle),0,math.sin(angle))*math.min(nativeOnly and 9 or ctx.Config.TeleportDodge and ctx.Config.InstinctMaxDistance or 4,ctx.Config.InstinctMaxDistance)
             local outside=true;for _,box in ipairs(boxes) do if inside(box,goal) then outside=false;break end end
             if outside and safe(root,goal,nil,boxes) then return execute(root,goal,"Manual test (not attack detection)","Test dodge button",true,boxes,nativeOnly) end
         end
@@ -1746,8 +1764,9 @@ return function(ctx)
         local canRun,pause=ctx.CanRun()
         if not canRun then M.Stop();M.Status="Paused: "..(pause or "input or camera");return end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        local blocked=movementBlock(char,hum,root)
-        M.LocalBlockReason=blocked or "None";M.BurstRejected=burstBlockedRoot~=nil and burstBlockedRoot==root
+        local blocked=movementBlock(char,hum,root,ctx.Config.TeleportDodge)
+        local walkingLocked=ctx.Config.TeleportDodge and (char and (char:GetAttribute("LOCKED_INPUTS")==true or char:GetAttribute("cutsceneLock")==true or char:GetAttribute("canRun")==false))
+        M.LocalBlockReason=blocked or (walkingLocked and "Walking inputs locked; local teleport can only be attempted" or "None");M.BurstRejected=burstBlockedRoot~=nil and burstBlockedRoot==root
         if not root then M.Stop();M.Status=blocked or "Character not ready";return end
         if motion and not blocked then M.Steer(dt);if motion then return end end
         if age&lt;0.025 then return end;age=0
@@ -1837,7 +1856,7 @@ return function(ctx)
             candidates={(side-toward*0.5).Unit,(side*(-1)-toward*0.5).Unit,side,side*(-1),toward*(-1)}
         end
         local reason=bestRecord.Cue.Reason
-        local preferred=math.min(bestRecord.Cue.Ability and 10 or 8,ctx.Config.InstinctMaxDistance)
+        local preferred=ctx.Config.TeleportDodge and ctx.Config.InstinctMaxDistance or math.min(bestRecord.Cue.Ability and 10 or 8,ctx.Config.InstinctMaxDistance)
         for _,length in ipairs({preferred,8,6,4,3}) do
             if length&lt;=ctx.Config.InstinctMaxDistance then
                 for _,direction in ipairs(candidates) do
@@ -1915,7 +1934,7 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.8",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 5.9",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
@@ -1960,6 +1979,7 @@ return function(ctx)
             animate(knob,{Position=UDim2.fromOffset(previous and 19 or 3,3),BackgroundColor3=previous and C.Base or C.Sub})
         end
         table.insert(paints,paint);paint();connect(b.Activated,function() API.SetOption(key,not cfg[key]) end)
+        return b
     end
     local function slider(parent,key,title,minimum,maximum,percent)
         local row=make("Frame",{Name=key,Size=UDim2.new(1,0,0,51),BackgroundTransparency=1},parent)
@@ -1982,27 +2002,29 @@ return function(ctx)
         connect(hit.InputBegan,function(input)
             if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then sliderDrag={Input=input,Update=update};update(input.Position.X) end
         end)
+        return row
     end
     local function button(parent,name,title,fn)
         local b=make("TextButton",{Name=name,Text=title,Size=UDim2.new(1,0,0,37),Font=Enum.Font.GothamBold,TextSize=12,
-            TextColor3=C.Text,BackgroundColor3=C.Raised,AutoButtonColor=false,BorderSizePixel=0},parent);round(b,8);hover(b);connect(b.Activated,fn)
+            TextColor3=C.Text,BackgroundColor3=C.Raised,AutoButtonColor=false,BorderSizePixel=0},parent);round(b,8);hover(b);connect(b.Activated,fn);return b
     end
     local farm=section(M.combat,"AUTO FARM","Automatically selects opponents, moves into position, and requests your hero’s available attacks and abilities.")
     local play=make("TextButton",{Name="Play",Size=UDim2.new(1,0,0,43),Text="PLAY",Font=Enum.Font.GothamBold,TextSize=13,
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
-    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready. Fast sidestep adds a brief local speed burst and restores your previous speed. Changing joystick direction cancels it. If the game replaces burst speed, it continues at game-controlled speed. Locked abilities/cutscenes prevent movement.")
+    local defense=section(M.combat,"ULTRA INSTINCT","Teleport mode makes one capped local relocation on a detected nearby attack. Hidden damage bounds are estimated. The server can correct the move; avoiding every ability is not guaranteed.")
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
-    toggle(defense,"FastSidestep","Fast sidestep")
-    slider(defense,"InstinctBurstSpeed","Burst speed",24,96)
+    toggle(defense,"TeleportDodge","Teleport dodge")
+    local walkToggle=toggle(defense,"FastSidestep","Fast sidestep (walking mode)")
+    local walkSpeed=slider(defense,"InstinctBurstSpeed","Burst speed",24,96)
     slider(defense,"InstinctRange","Nearby attack range",6,24)
-    slider(defense,"InstinctMaxDistance","Sidestep limit",4,12)
+    slider(defense,"InstinctMaxDistance","Escape distance",4,12)
     local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,60));instinct.TextWrapped=true
-    button(defense,"TestDodge","Test sidestep",function()
-        local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Sidestep requested · see report" or (reason or "Test blocked")
+    local testEscape=button(defense,"TestDodge","Test escape",function()
+        local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Escape requested · see report" or (reason or "Test blocked")
     end)
-    button(defense,"TestNativeDash","Test game dash",function()
+    local nativeTest=button(defense,"TestNativeDash","Test game dash",function()
         local ok,reason=API.Instinct.TestDodge(true);footer.Text=ok and "Native dash input requested · see report" or (reason or "Dash unavailable")
     end)
     button(defense,"RecordDodge","Record nearby attacks · 10 sec",function()
@@ -2078,7 +2100,9 @@ return function(ctx)
         for _,paint in ipairs(paints) do paint() end
         play.Text=API.Enabled and "STOP" or "PLAY"
         play.BackgroundColor3=API.Enabled and Color3.fromRGB(99,52,70) or C.Accent;play.TextColor3=API.Enabled and C.Text or C.Base
-        status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.AutomaticMoves.." automatic · "..API.Instinct.TestMoves.." tests"..(API.Instinct.Recording and " · RECORDING" or "")..(API.Instinct.BurstRejected and " · boost overridden by game" or "")
+        walkToggle.Visible=not cfg.TeleportDodge;walkSpeed.Visible=not cfg.TeleportDodge;nativeTest.Visible=not cfg.TeleportDodge
+        testEscape.Text=cfg.TeleportDodge and "Test teleport" or "Test sidestep"
+        status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.AutomaticMoves.." automatic · "..API.Instinct.TestMoves.." tests"..(API.Instinct.Recording and " · RECORDING" or "")..(not cfg.TeleportDodge and API.Instinct.BurstRejected and " · boost overridden by game" or "")
     end
     function M.Destroy()
         if dead then return end;dead=true;sliderDrag=nil;drag=nil
@@ -2097,7 +2121,7 @@ function API.SetOption(key,value)
         value=math.clamp(value,bounds[key][1],bounds[key][2])
     end
     Config[key]=value
-    if key=="FastSidestep" and not value then API.Instinct.Stop() end
+    if key=="FastSidestep" and not value or key=="TeleportDodge" then API.Instinct.Stop() end
     if key=="UltraInstinct" then
         if value then scan() else API.Instinct.Stop() end
     end

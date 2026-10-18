@@ -62,7 +62,7 @@ local CFrame = {}
 function CFrame.lookAt(position, point)
 	local frame={Position=position,Point=point,LookVector=(point-position).Unit}
 	function frame:Lerp(goal) return CFrame.lookAt(goal.Position,goal.Point) end
-	return frame
+	return setmetatable(frame,{__add=function(a,offset) return CFrame.lookAt(a.Position+offset,a.Point+offset) end})
 end
 local cameraFrame = {Position=Vector3.new(),LookVector=Vector3.new(0,0,-1)}
 function cameraFrame:Lerp(goal, alpha)
@@ -281,7 +281,7 @@ local function findName(root,name)
 	for _,child in ipairs(root:GetChildren()) do local result=findName(child,name); if result then return result end end
 end
 local api=boot()
-check(api.Version=="5.8" and not api.Enabled,"auto play should start off")
+check(api.Version=="5.9" and not api.Enabled,"auto play should start off")
 local play=findName(api.Gui,"Play")
 check(play and play.Text=="PLAY","one Play button missing")
 check(findName(api.Gui,"Tab_combat") and findName(api.Gui,"Tab_visuals") and findName(api.Gui,"Tab_settings"),"full interface tabs missing")
@@ -820,7 +820,7 @@ local function interfaceVisualInstinctChecks()
     root.Position=Vector3.new();root.CFrame=CFrame.lookAt(root.Position,root.Position+Vector3.new(1,0,0))
     enemy.Position=Vector3.new(8,0,0);enemy.CFrame=CFrame.lookAt(enemy.Position,root.Position)
     enemyChar:FindFirstChildOfClass("Humanoid").Health=100;enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("lastSwing",100)
-    api=boot();api.SetOption("FastSidestep",false)
+    api=boot();api.SetOption("TeleportDodge",false);api.SetOption("FastSidestep",false)
     for id,name in pairs({Water="Aquaman",Earth="Hulk",Knight="Thor",Samurai="Deadpool",Nature="Groot"}) do
         enemyChar:SetAttribute("MorphCurrent",id);enemyChar:SetAttribute("power","Spiderman");api.Visuals.Step(0.2)
         local hero,kind=api.ResolveHero(other);check(hero==name and kind=="confirmed","confirmed role alias failed: "..id)
@@ -985,7 +985,7 @@ local function interfaceVisualInstinctChecks()
     local controls={controlsEnabled=true,Disable=function() disabled+=1 end,Enable=function() end,GetMoveVector=function() return moveVector end}
     local scripts=node("Folder","PlayerScripts",localPlayer);local module=node("ModuleScript","PlayerModule",scripts)
     module.MockModule={GetControls=function() return controls end}
-    api.Unload();api=boot();api.SetOption("ESP",false);api.SetOption("FastSidestep",false);api.SetEnabled(true)
+    api.Unload();api=boot();api.SetOption("TeleportDodge",false);api.SetOption("ESP",false);api.SetOption("FastSidestep",false);api.SetEnabled(true)
     moveVector=Vector3.new(1,0,0);api.Step(0.1)
     check(disabled==0 and controls.controlsEnabled and api.Status=="Paused for your movement","Auto Farm disabled controls or fought joystick input")
     moveVector=Vector3.new();local key={UserInputType=Enum.UserInputType.Keyboard,KeyCode=Enum.KeyCode.W}
@@ -1029,7 +1029,7 @@ local function interfaceVisualInstinctChecks()
     local rejectedBursts=api.Instinct.SpeedBursts
     stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",203.5);stepDefense(1)
     check(hum.WalkSpeed==20 and api.Instinct.SpeedBursts==rejectedBursts,"controller retried a rejected speed burst on the same character")
-    stepDefense(12);api.Unload();api=boot();api.SetOption("UltraInstinct",true)
+    stepDefense(12);api.Unload();api=boot();api.SetOption("TeleportDodge",false);api.SetOption("UltraInstinct",true)
     hum.WalkSpeed=16;stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",204);stepDefense(1)
     moveVector=Vector3.new(1,0,0);stepDefense(1)
     check(hum.WalkSpeed==16 and not api.Instinct.Dodging and hum.LastMove==moveVector,"manual override left the speed boost active")
@@ -1044,7 +1044,7 @@ local function interfaceVisualInstinctChecks()
     check(hum.WalkSpeed==16 and not api.Instinct.Dodging,"death left the character's owned speed boosted")
     hum.Health=100;stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",208);stepDefense(1)
     api.Unload();check(hum.WalkSpeed==16,"unload left boosted movement behind")
-    api=boot();check(api.Config.FastSidestep and api.Config.InstinctBurstSpeed==64,"the requested fast fallback does not start with the new defaults")
+    api=boot();api.SetOption("TeleportDodge",false);check(api.Config.FastSidestep and api.Config.InstinctBurstSpeed==64,"the requested fast fallback does not start with the new defaults")
     api.SetOption("InstinctBurstSpeed",999);check(api.Config.InstinctBurstSpeed==96,"burst speed ignored the configured upper cap")
     api.SetOption("InstinctBurstSpeed",64)
     -- A sent native input can be ignored; then the pending fast fallback must still engage.
@@ -1118,6 +1118,77 @@ local function interfaceVisualInstinctChecks()
     flushSpawn();flush()
 end
 interfaceVisualInstinctChecks()
+
+-- The requested default mode relocates instantly; old walking-mode tests above explicitly opt out.
+local function teleportChecks()
+    api.Unload();wall=false;ground=true;destinationBlocked=false;queryParts={};input.TouchEnabled=true
+    local char=localPlayer.Character;local hum=char:FindFirstChildOfClass("Humanoid");local root=char.PrimaryPart
+    local enemyChar=other.Character;local enemy=enemyChar.PrimaryPart
+    hum.Health=100;hum.PlatformStand=false;hum.WalkSpeed=24;root.Anchored=false
+    for _,key in ipairs({"LOCKED_INPUTS","cutsceneLock","canRun","busy","inArena","MorphAppearanceReady"}) do char:SetAttribute(key,nil) end
+    enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("lastSwing",400);enemyChar:SetAttribute("m1Resolved",nil);enemyChar:SetAttribute("combo",0);enemyChar:SetAttribute("castLocked",false)
+    local function place(p) root.Position=p;root.CFrame=CFrame.lookAt(p,p+Vector3.new(1,0,0)) end
+    local function advance(n)
+        for _=1,n do api.Step(0.05);root.Position=root.CFrame.Position;renderAim(0.05) end
+    end
+    place(Vector3.new());enemy.Position=Vector3.new(8,0,0)
+    api=boot()
+    check(api.Config.TeleportDodge and not api.Config.UltraInstinct,"teleport is not the default mode or executes without enabling defense")
+    check(not findName(api.Gui,"FastSidestep").Visible and not findName(api.Gui,"InstinctBurstSpeed").Visible,"walking speed controls clutter the default teleport mode")
+    local key={UserInputType=Enum.UserInputType.Keyboard,KeyCode=Enum.KeyCode.W};input.InputBegan:Fire(key,false)
+    local manualMove=Vector3.new(0.4,0,0.6);hum.LastMove=manualMove
+    local velocity=Vector3.new(1,2,3);root.AssemblyLinearVelocity=velocity
+    local keysBefore,touchesBefore=#sentKeys,#sentTouches
+    api.SetOption("UltraInstinct",true);advance(1);enemyChar:SetAttribute("lastSwing",401);advance(1)
+    check(api.Instinct.Teleports==1 and api.Instinct.AutomaticMoves==1,"detected attack did not trigger the requested instant teleport")
+    check(root.Position.Magnitude>11.5 and root.Position.Magnitude<=12.001,"estimated teleport did not use the capped local escape distance")
+    check(hum.WalkSpeed==24 and hum.LastMove==manualMove and root.AssemblyLinearVelocity==velocity,"teleport changed speed, input or velocity")
+    check(root.CFrame.LookVector.X==1 and #sentKeys==keysBefore and #sentTouches==touchesBefore,"teleport changed facing or emitted native inputs")
+    check(api.Instinct.NativeDashes==0 and api.Instinct.SpeedBursts==0,"teleport accidentally depended on a dash or speed burst")
+    local requests=api.Instinct.Teleports;advance(4)
+    check(api.Instinct.Motion:find("Local displacement observed",1,true),"teleport displacement was not observed")
+    -- Emulate a correction: report it instead of repeatedly forcing the position.
+    place(Vector3.new());advance(12)
+    check(api.Instinct.Teleports==requests and api.Instinct.Motion:find("Returned near start",1,true),"correction was hidden or caused a forced teleport loop")
+    input.InputEnded:Fire(key)
+    char:SetAttribute("LOCKED_INPUTS",true);char:SetAttribute("cutsceneLock",true);char:SetAttribute("canRun",false)
+    enemyChar:SetAttribute("lastSwing",402);advance(1)
+    check(api.Instinct.Teleports==requests+1,"teleport mode still waited for walking inputs to unlock")
+    check(char:GetAttribute("LOCKED_INPUTS")==true and char:GetAttribute("cutsceneLock")==true and char:GetAttribute("canRun")==false,"teleport cleared game lock attributes")
+    local ok,reason=api.Instinct.TestDodge(true)
+    check(not ok and reason:find("LOCKED_INPUTS",1,true),"native-dash-only test ignored its real game locks while teleport mode was selected")
+    for _,k in ipairs({"LOCKED_INPUTS","cutsceneLock","canRun"}) do char:SetAttribute(k,nil) end
+    advance(12);place(Vector3.new());requests=api.Instinct.Teleports
+    root.Anchored=true;enemyChar:SetAttribute("lastSwing",403);advance(1)
+    check(api.Instinct.Teleports==requests and root.Position.Magnitude==0,"anchored character was teleported")
+    root.Anchored=false;advance(12);place(Vector3.new());requests=api.Instinct.Teleports;ground=false;enemyChar:SetAttribute("lastSwing",404);advance(1)
+    check(api.Instinct.Teleports==requests,"teleport ignored missing ground")
+    ground=true;destinationBlocked=true;advance(2)
+    check(api.Instinct.Teleports==requests,"teleport selected a solid destination")
+    destinationBlocked=false;wall=true;advance(2)
+    check(api.Instinct.Teleports==requests,"teleport crossed a solid obstruction")
+    wall=false;advance(12);place(Vector3.new())
+    api.SetOption("UltraInstinct",false)
+    local effects=node("Folder","Hitboxes",workspace)
+    local hit=node("Part","AbilityHitbox",effects);hit.Position=Vector3.new();hit.CFrame=CFrame.new(hit.Position);hit.Size=Vector3.new(6,4,6);hit.CanCollide=false;hit:SetAttribute("IsAttack",true);hit:SetAttribute("OwnerUserId",other.UserId)
+    queryParts={hit};api.SetOption("UltraInstinct",true);advance(1)
+    local p=hit.CFrame:PointToObjectSpace(root.Position)
+    check(math.abs(p.X)>4.7 or math.abs(p.Z)>4.2,"geometry-planned teleport remained in the expanded detected volume")
+    check(api.Instinct.LastDistance<=12,"geometry escape exceeded the local cap")
+    api.SetOption("UltraInstinct",false);hit.Size=Vector3.new(100,20,100);place(Vector3.new());requests=api.Instinct.Teleports
+    api.SetOption("UltraInstinct",true);advance(1)
+    check(api.Instinct.Teleports==requests,"unescapable large volume caused a teleport across the map")
+    api.SetOption("UltraInstinct",false);hit:Destroy();effects:Destroy();queryParts={};place(Vector3.new())
+    api.Instinct.RecordEncounter();advance(1);enemyChar:SetAttribute("lastSwing",405);advance(1)
+    check(api.Instinct.Teleports==requests,"record-only mode made an automatic teleport")
+    local tests=api.Instinct.TestMoves;findName(api.Gui,"TestDodge").Activated:Fire();root.Position=root.CFrame.Position
+    check(api.Instinct.TestMoves==tests+1 and root.Position.Magnitude>11.5,"test button did not preview the capped teleport mode")
+    local after=root.Position;api.SetOption("TeleportDodge",false)
+    check(root.Position==after and findName(api.Gui,"FastSidestep").Visible,"switching mode moved the character or failed to reveal walking controls")
+    api.SetOption("TeleportDodge",true);api.SetOption("UltraInstinct",false)
+    char:SetAttribute("state","neutral");root.AssemblyLinearVelocity=Vector3.new();advance(202)
+end
+teleportChecks()
 
 -- Unload during a pending route; all owned controls and callbacks disappear.
 wall=true; api.SetEnabled(true); tick(1)
