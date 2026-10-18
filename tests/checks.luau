@@ -42,6 +42,7 @@ V3.__mul = function(a,b) if type(a)=="number" then a,b=b,a end; return setmetata
 function V3:Dot(b) return self.X*b.X+self.Y*b.Y+self.Z*b.Z end
 local Vector3 = { new = function(x,y,z) return setmetatable({ X=x or 0,Y=y or 0,Z=z or 0 }, V3) end }
 local RaycastParams={new=function() return {} end}
+local OverlapParams={new=function() return {} end}
 local UDim = { new = function(scale, offset) return { Scale=scale or 0, Offset=offset or 0 } end }
 local UDim2 = {
 	new = function(xs,xo,ys,yo) return { X=UDim.new(xs,xo), Y=UDim.new(ys,yo) } end,
@@ -253,6 +254,16 @@ local getconnections=function(s)
 	local connected={}; for _,c in ipairs(s.handlers) do if c.Connected then table.insert(connected,c) end end
 	return connected
 end
+local queryParts={}
+local destinationBlocked=false
+workspace.DescendantAdded=signal()
+function workspace:GetPartBoundsInRadius() return table.clone(queryParts) end
+function workspace:GetPartBoundsInBox() return destinationBlocked and {{CanCollide=true}} or {} end
+local originalRequire=require
+local require=function(module)
+    if type(module)=="table" and module.MockModule then return module.MockModule end
+    return originalRequire(module)
+end
 local function boot()
 -- INSERT STANDALONE HUB
 end
@@ -265,7 +276,7 @@ local function findName(root,name)
 	for _,child in ipairs(root:GetChildren()) do local result=findName(child,name); if result then return result end end
 end
 local api=boot()
-check(api.Version=="5.0" and not api.Enabled,"auto play should start off")
+check(api.Version=="5.1" and not api.Enabled,"auto play should start off")
 local play=findName(api.Gui,"Play")
 check(play and play.Text=="PLAY","one Play button missing")
 check(findName(api.Gui,"Tab_combat") and findName(api.Gui,"Tab_visuals") and findName(api.Gui,"Tab_settings"),"full interface tabs missing")
@@ -831,54 +842,106 @@ local function interfaceVisualInstinctChecks()
     findName(api.Gui,"Minimize").Activated:Fire();check(not api.UI.Window.Visible and findName(api.Gui,"Restore").Visible,"minimize failed")
     findName(api.Gui,"Restore").Activated:Fire();check(api.UI.Window.Visible,"mobile logo did not reopen the hub")
     camera.ViewportSize=Vector2.new(1280,720);api.UI.Step()
-    hud=node("ScreenGui","HUD_Mobile",localPlayer:FindFirstChild("PlayerGui"))
-    local dash=node("TextButton","DashButton",hud);dash.Text="Dash";dash:SetAttribute("CooldownDuration",3)
-    local dashes=0;dash.Activated:Connect(function() dashes+=1 end)
-    api.SetOption("InstinctDash",false);api.SetOption("UltraInstinct",true)
-    api.Step(0.1);enemyChar:SetAttribute("lastSwing",101);api.Step(0.1);renderAim(0.1)
-    check(api.Instinct.Reactions==1 and hum.LastMove.Magnitude>0.5 and not api.Enabled,"independent Ultra Instinct did not move while farm was off")
-    check(root.CFrame.Position.Magnitude==0 and dashes==0,"sidestep teleported or requested disabled dash")
-    for _=1,12 do api.Step(0.1);renderAim(0.1) end
-    check(api.Instinct.Reactions==1,"unchanged attack repeatedly triggered defense")
-    api.SetOption("InstinctDash",true);enemyChar:SetAttribute("lastSwing",102);api.Step(0.1)
-    check(api.Instinct.Reactions==2 and dashes==1,"available native dash was not requested")
-    for _=1,8 do api.Step(0.1);renderAim(0.1) end
-    dash:SetAttribute("OnCooldown",true);enemyChar:SetAttribute("lastSwing",103);api.Step(0.1)
-    check(api.Instinct.Reactions==3 and dashes==1,"Ultra Instinct bypassed native dash cooldown")
-    api.SetOption("UltraInstinct",false);check(not api.Instinct.Dodging and hum.LastMove.Magnitude==0,"defense off left movement active")
-    api.SetOption("UltraInstinct",true);api.Step(0.1)
-    local before=api.Instinct.Reactions
-    enemy.CFrame=CFrame.lookAt(enemy.Position,enemy.Position+Vector3.new(1,0,0));enemyChar:SetAttribute("lastSwing",104);api.Step(0.1)
-    check(api.Instinct.Reactions==before,"opponent facing away caused an evade")
-    enemy.CFrame=CFrame.lookAt(enemy.Position,root.Position);wall=true;enemyChar:SetAttribute("lastSwing",105);api.Step(0.1)
-    check(api.Instinct.Reactions==before,"obstructed opponent caused an evade")
-    wall=false;ground=false;enemyChar:SetAttribute("lastSwing",106);api.Step(0.1)
-    check(api.Instinct.Reactions==before,"defense selected unverified ground")
-    ground=true;focusedBox={};enemyChar:SetAttribute("lastSwing",107);api.Step(0.1);renderAim(0.1)
-    check(not api.Instinct.Dodging,"defense ran while typing");focusedBox=nil
-    api.SetOption("UltraInstinct",false);api.SetOption("UltraInstinct",true);api.Step(0.1)
-    local animator=enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator")
-    local idleTrack=node("AnimationTrack","Idle",nil);idleTrack.Animation=node("Animation","Idle",nil)
-    animator.AnimationPlayed:Fire(idleTrack);api.Step(0.1);check(not api.Instinct.Dodging,"idle animation caused an evade")
-    local attackTrack=node("AnimationTrack","RepulsorWindup",nil);attackTrack.Animation=node("Animation","RepulsorWindup",nil)
-    animator.AnimationPlayed:Fire(attackTrack);api.Step(0.1);renderAim(0.1)
-    check(api.Instinct.Dodging and api.Instinct.LastCue=="Attack animation","recognizable attack animation was ignored")
-    ch:SetAttribute("canRun",false);api.Step(0.1);renderAim(0.1)
-    check(not api.Instinct.Dodging,"movement lock did not cancel defense");ch:SetAttribute("canRun",nil)
-    api.SetOption("UltraInstinct",false);api.SetOption("InstinctDash",false)
-    enemy.Position=Vector3.new(30,0,0);enemy.CFrame=CFrame.lookAt(enemy.Position,root.Position)
-    api.SetOption("UltraInstinct",true);api.Step(0.1)
-    before=api.Instinct.Reactions;enemyChar:SetAttribute("lastSwing",108);api.Step(0.1)
-    check(api.Instinct.Reactions==before,"out-of-reach melee triggered a dodge")
-    enemyChar:SetAttribute("CastStartedAt",10);api.Step(0.1)
-    check(api.Instinct.Reactions==before+1,"ranged ability windup was not detected inside configured range")
-    api.SetOption("UltraInstinct",false);enemyChar:SetAttribute("CastStartedAt",nil);enemy.Position=Vector3.new(8,0,0)
+    -- Geometry-capable CFrame methods for the one-shot escape tests.
+    local makeFrame=CFrame.lookAt
+    CFrame.lookAt=function(position,point)
+        local frame=makeFrame(position,point)
+        function frame:VectorToObjectSpace(v)
+            local look=self.LookVector;local right=Vector3.new(-look.Z,0,look.X).Unit
+            return Vector3.new(v:Dot(right),v.Y,-v:Dot(look))
+        end
+        function frame:PointToObjectSpace(v) return self:VectorToObjectSpace(v-self.Position) end
+        return frame
+    end
+    CFrame.new=function(position) return CFrame.lookAt(position,position+Vector3.new(0,0,-1)) end
+    root.Size=Vector3.new(2,2,1)
+    local function place(position)
+        root.Position=position;root.CFrame=CFrame.lookAt(position,position+Vector3.new(1,0,0))
+    end
+    local function stepDefense(count)
+        for _=1,count do api.Step(0.1);root.Position=root.CFrame.Position;renderAim(0.1) end
+    end
+    place(Vector3.new());enemy.Position=Vector3.new(8,0,0);enemy.CFrame=CFrame.lookAt(enemy.Position,root.Position)
+    enemyChar:SetAttribute("lastSwing",100);enemyChar:SetAttribute("state","neutral")
+    local userMove=Vector3.new(0.5,0,0);hum.LastMove=userMove
+    api.SetOption("UltraInstinct",true);stepDefense(1)
+    enemyChar:SetAttribute("lastSwing",101);stepDefense(1)
+    check(api.Instinct.Reactions==1 and not api.Enabled,"nearby attack did not trigger an independent dodge")
+    check(api.Instinct.LastDistance<=10 and root.Position.Magnitude>0 and hum.LastMove==userMove,"short dodge held movement or exceeded local cap")
+    check(api.Instinct.LastMode=="Short dodge · hitbox unknown","unknown geometry was incorrectly described as a confirmed hitbox escape")
+    local after=root.Position
+    stepDefense(12);check(api.Instinct.Reactions==1 and (root.Position-after).Magnitude<0.01,"unchanged attack caused repeated movement")
+    api.SetOption("UltraInstinct",false);check(hum.LastMove==userMove and not api.Instinct.Dodging,"turning defense off canceled manual movement")
+    local effects=node("Folder","Projectiles",workspace)
+    local function hazard(name,position,size,owner,queryable)
+        local part=node("Part",name,effects);part.Position=position;part.Size=size;part.CFrame=CFrame.lookAt(position,position+Vector3.new(1,0,1))
+        part.CanCollide=false;part.CanQuery=queryable~=false;part:SetAttribute("IsAttack",true)
+        if owner then part:SetAttribute("OwnerUserId",owner.UserId) end
+        return part
+    end
+    -- Escape a rotated, active volume even if the caster is facing away.
+    place(Vector3.new());enemy.CFrame=CFrame.lookAt(enemy.Position,enemy.Position+Vector3.new(1,0,0))
+    local hitbox=hazard("AbilityHitbox",Vector3.new(),Vector3.new(6,4,6),other,true)
+    queryParts={hitbox};api.SetOption("UltraInstinct",true);local before=api.Instinct.Reactions;stepDefense(1)
+    local localPoint=hitbox.CFrame:PointToObjectSpace(root.Position)
+    check(api.Instinct.Reactions==before+1 and api.Instinct.LastMode=="Local hitbox escape","nearby real hitbox was ignored")
+    check(math.abs(localPoint.X)>hitbox.Size.X/2+root.Size.X/2+0.7 or math.abs(localPoint.Z)>hitbox.Size.Z/2+root.Size.Z/2+0.7,"destination stayed in expanded attack volume")
+    check(api.Instinct.LastDistance<=10 and hum.LastMove==userMove,"hitbox escape exceeded cap or canceled joystick input")
+    after=root.Position;stepDefense(10);check((root.Position-after).Magnitude<0.01,"active volume caused repeated teleporting after escape")
+    api.SetOption("UltraInstinct",false);hitbox:Destroy();queryParts={}
+    -- Own attacks, inactive volumes and static map parts cannot trigger escapes.
+    place(Vector3.new());local ownHit=hazard("AbilityHitbox",Vector3.new(),Vector3.new(6,4,6),localPlayer,true)
+    queryParts={ownHit};api.SetOption("UltraInstinct",true);before=api.Instinct.Reactions;stepDefense(2)
+    check(api.Instinct.Reactions==before,"own ability caused a dodge")
+    api.SetOption("UltraInstinct",false);ownHit:Destroy();queryParts={}
+    local inactive=hazard("AbilityHitbox",Vector3.new(),Vector3.new(6,4,6),other,true);inactive:SetAttribute("Active",false)
+    queryParts={inactive};api.SetOption("UltraInstinct",true);stepDefense(2)
+    check(api.Instinct.Reactions==before,"inactive hitbox caused a dodge")
+    api.SetOption("UltraInstinct",false);inactive:Destroy();queryParts={}
+    -- Oversized attacks are rejected instead of transporting the player across the map.
+    local giant=hazard("AttackHitbox",Vector3.new(),Vector3.new(100,20,100),other,true)
+    queryParts={giant};api.SetOption("UltraInstinct",true);stepDefense(1)
+    check(api.Instinct.Reactions==before and root.Position.Magnitude<0.01,"large attack escaped beyond the local cap")
+    api.SetOption("UltraInstinct",false);giant:Destroy();queryParts={}
+    -- Non-queryable effects spawned during play use DescendantAdded.
+    api.SetOption("UltraInstinct",true);stepDefense(1)
+    local nonquery=hazard("AbilityHitbox",Vector3.new(),Vector3.new(4,4,4),other,false)
+    workspace.DescendantAdded:Fire(nonquery);stepDefense(1)
+    check(api.Instinct.Reactions==before+1,"non-queryable new attack was not observed")
+    api.SetOption("UltraInstinct",false);nonquery:Destroy();place(Vector3.new());queryParts={}
+    -- Parts whose names/attributes arrive after parenting are also detected.
+    api.SetOption("UltraInstinct",true);stepDefense(1);before=api.Instinct.Reactions
+    local late=node("Part","Part",effects);late.Size=Vector3.new(4,4,4);late.Position=Vector3.new();late.CFrame=CFrame.new(late.Position);late.CanQuery=false;late.CanCollide=false
+    workspace.DescendantAdded:Fire(late)
+    late.Name="AbilityHitbox";late:SetAttribute("OwnerUserId",other.UserId);late:SetAttribute("IsAttack",true)
+    stepDefense(1);check(api.Instinct.Reactions==before+1,"late attack metadata was ignored")
+    api.SetOption("UltraInstinct",false);late:Destroy();place(Vector3.new());queryParts={}
+    -- Blocked exits, missing ground, and typing leave movement untouched.
+    local blocked=hazard("AbilityHitbox",Vector3.new(),Vector3.new(4,4,4),other,true);queryParts={blocked}
+    ground=false;api.SetOption("UltraInstinct",true);before=api.Instinct.Reactions;stepDefense(1)
+    check(api.Instinct.Reactions==before and root.Position.Magnitude==0,"escape moved onto unverified ground")
+    ground=true;wall=true;stepDefense(2);check(api.Instinct.Reactions==before,"escape crossed a solid obstruction")
+    wall=false;destinationBlocked=true;stepDefense(2);check(api.Instinct.Reactions==before,"escape ended in a solid part")
+    destinationBlocked=false;focusedBox={};stepDefense(2);check(api.Instinct.Reactions==before,"escape ran while typing");focusedBox=nil
+    api.SetOption("UltraInstinct",false);blocked:Destroy();queryParts={};effects:Destroy()
+    -- Auto Farm leaves ControlModule enabled and yields to keyboard/joystick input.
+    local disabled=0;local moveVector=Vector3.new()
+    local controls={controlsEnabled=true,Disable=function() disabled+=1 end,Enable=function() end,GetMoveVector=function() return moveVector end}
+    local scripts=node("Folder","PlayerScripts",localPlayer);local module=node("ModuleScript","PlayerModule",scripts)
+    module.MockModule={GetControls=function() return controls end}
+    api.Unload();api=boot();api.SetOption("ESP",false);api.SetEnabled(true)
+    moveVector=Vector3.new(1,0,0);api.Step(0.1)
+    check(disabled==0 and controls.controlsEnabled and api.Status=="Paused for your movement","Auto Farm disabled controls or fought joystick input")
+    moveVector=Vector3.new();local key={UserInputType=Enum.UserInputType.Keyboard,KeyCode=Enum.KeyCode.W}
+    input.InputBegan:Fire(key,false);api.Step(0.1);check(api.Status=="Paused for your movement","manual keyboard input did not pause farm")
+    input.InputEnded:Fire(key);api.Step(0.1);check(api.Status~="Paused for your movement" and disabled==0,"releasing movement left the farm/input paused")
+    api.SetEnabled(false);scripts:Destroy();check(controls.controlsEnabled,"Stop disabled normal movement")
+    enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("MorphCurrent",nil);enemyChar:SetAttribute("power",nil)
     local handle=findName(api.Gui,"Handle")
     local touch={UserInputType=Enum.UserInputType.Touch,Position=Vector3.new(100,100,0)}
     handle.InputBegan:Fire(touch);touch.Position=Vector3.new(9999,-9999,0);input.InputChanged:Fire(touch);input.InputEnded:Fire(touch)
     local panel=api.UI.Window
     check(panel.Position.X.Offset+panel.Size.X.Offset/2<=camera.ViewportSize.X-8 and panel.Position.Y.Offset-panel.Size.Y.Offset/2>=8,"drag allowed UI outside viewport")
-    for _,item in ipairs({idleTrack,idleTrack.Animation,attackTrack,attackTrack.Animation}) do item:Destroy() end
     enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("MorphCurrent",nil);enemyChar:SetAttribute("power",nil)
     flushSpawn();flush()
 end

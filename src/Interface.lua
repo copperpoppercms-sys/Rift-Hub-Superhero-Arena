@@ -56,7 +56,7 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.0",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 5.1",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
@@ -129,9 +129,10 @@ return function(ctx)
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
-    local defense=section(M.combat,"ULTRA INSTINCT","Reacts to visible attack windups and recognizable animations. Dodges toward clear ground; hidden attack data cannot be predicted.")
-    toggle(defense,"UltraInstinct","Enable Ultra Instinct");toggle(defense,"InstinctDash","Use dash when ready")
-    slider(defense,"InstinctRange","Ability cue range",15,60)
+    local defense=section(M.combat,"ULTRA INSTINCT","Makes one short local escape from nearby detected attack volumes. If no hitbox is exposed, uses a bounded dodge estimate. Your normal controls remain enabled.")
+    toggle(defense,"UltraInstinct","Enable Ultra Instinct")
+    slider(defense,"InstinctRange","Nearby attack range",6,24)
+    slider(defense,"InstinctMaxDistance","Maximum dodge",4,12)
     local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,30));instinct.TextWrapped=true
     local esp=section(M.visuals,"PLAYER ESP","Hero-colored chams, role above username. No boxes, tracers, distances or health bars.")
     toggle(esp,"ESP","Enable player ESP");toggle(esp,"Chams","Chams");toggle(esp,"Roles","Hero role");toggle(esp,"Names","Usernames")
