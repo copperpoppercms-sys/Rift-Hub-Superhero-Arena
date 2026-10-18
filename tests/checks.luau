@@ -281,7 +281,7 @@ local function findName(root,name)
 	for _,child in ipairs(root:GetChildren()) do local result=findName(child,name); if result then return result end end
 end
 local api=boot()
-check(api.Version=="5.5" and not api.Enabled,"auto play should start off")
+check(api.Version=="5.6" and not api.Enabled,"auto play should start off")
 local play=findName(api.Gui,"Play")
 check(play and play.Text=="PLAY","one Play button missing")
 check(findName(api.Gui,"Tab_combat") and findName(api.Gui,"Tab_visuals") and findName(api.Gui,"Tab_settings"),"full interface tabs missing")
@@ -364,7 +364,7 @@ hum.AutoRotate=true
 primary:Destroy(); tertiary:Destroy(); attack.Visible=false
 local skill=node("TextButton","PrimarySkill",hud); skill:SetAttribute("KeyCode","E")
 own:SetAttribute("MorphCurrent","Hulk")
-input.TouchEnabled=true
+input.TouchEnabled=false
 api.SetEnabled(true)
 for _=1,10 do api.Step(0.1); renderAim(0.1) end
 check(#sentKeys>0 and sentKeys[#sentKeys].down,"detected skill key was not pressed")
@@ -490,8 +490,14 @@ local function mobileRegressionChecks()
 	localPlayer.Character=own; own.Parent=workspace; entities:Destroy()
 	api.SetEnabled(false)
 	-- Key hints only become bindings when explicitly labeled as keys.
-	key.Text="E"; api.SetEnabled(true); local keysBefore=#sentKeys; tick(30)
-	check(#sentKeys>keysBefore,"native sibling Keybind label was not detected")
+	key.Text="E"; api.SetEnabled(true); local keysBefore=#sentKeys;local tapsBefore=#sentTouches; tick(30)
+	check(#sentTouches>tapsBefore and #sentKeys==keysBefore,"mobile key-hint control switched to keyboard instead of using touch")
+    api.SetEnabled(false)
+    local oldTouch=vim.SendTouchEvent;local mouseCount=#sentMouse;local keyCount=#sentKeys
+    vim.SendTouchEvent=function() error("touch input denied") end
+    api.SetEnabled(true);tick(30)
+    check(#sentMouse==mouseCount and #sentKeys==keyCount,"failed mobile touch fell through to keyboard/mouse and could switch input mode")
+    vim.SendTouchEvent=oldTouch
 	api.SetEnabled(false); key.Text=""; frame:Destroy()
 	local unrelated=node("TextButton","Inventory",hud); unrelated.Text="Inventory"
 	api.SetEnabled(true); tick(8)
@@ -510,7 +516,7 @@ mobileRegressionChecks()
 
 -- A game can expose its actual bindings through CAS without named HUD buttons.
 local function actionBindingChecks()
-	api.Unload(); hud:Destroy(); wall=false; ground=true; input.TouchEnabled=true
+	api.Unload(); hud:Destroy(); wall=false; ground=true; input.TouchEnabled=false
 	hud=node("ScreenGui","NativeHUD",localPlayer:FindFirstChild("PlayerGui"))
 	for _,key in ipairs({Enum.KeyCode.Q,Enum.KeyCode.E,Enum.KeyCode.R}) do key.EnumType=Enum.KeyCode end
 	nativeActions={CombatDashAction={inputTypes={Enum.KeyCode.Q}},HeroSkill1={inputTypes={Enum.KeyCode.E}},
@@ -554,7 +560,7 @@ local function reportedHudChecks()
 	local cosmetics=0
 	local icons={}
 	for slot,info in pairs({[2]={"E","Geyser"},[3]={"F","Water Breath"},[4]={"R","Tentacle Smack"}}) do
-		local icon=node("ImageButton","AbilityIcon"..slot,bar); icons[slot]=icon
+		local icon=node("ImageButton","AbilityIcon"..slot,bar); icons[slot]=icon;icon.Position=UDim2.fromOffset(slot*100,500)
 		local frame=node("Frame","Frame",icon)
 		local tile=node("Frame","KeyTile",frame); node("TextLabel","Keybind",tile).Text=info[1]
 		local plate=node("Frame","Nameplate",frame); node("TextLabel","AbilityName",plate).Text=info[2]
@@ -562,7 +568,7 @@ local function reportedHudChecks()
 		icon.Activated:Connect(function() cosmetics+=1 end)
 	end
 	local dashFrame=node("Frame","Dash",hud)
-	local dash=node("TextButton","DashButton",dashFrame)
+	local dash=node("TextButton","DashButton",dashFrame);dash.Position=UDim2.fromOffset(700,500)
 	dash.Activated:Connect(function() cosmetics+=1 end)
 	local attackFrame=node("Frame","Attack",hud)
 	local attack=node("TextButton","AttackButton",attackFrame)
@@ -573,16 +579,16 @@ local function reportedHudChecks()
 	root.Position=Vector3.new(); local enemy=other.Character:FindFirstChild("HumanoidRootPart"); enemy.Position=Vector3.new(25,0,0)
 	own:SetAttribute("MorphCurrent","Water"); own:SetAttribute("canRun",true)
 	api=boot(); api.SetEnabled(true)
-	local before=#sentKeys
+	local before=#sentKeys;local touchBefore=#sentTouches
 	tick(6)
 	local dashRequested=false
-	for i=before+1,#sentKeys do if sentKeys[i].down and sentKeys[i].key==Enum.KeyCode.Q then dashRequested=true end end
-	check(dashRequested,"reported Q dash binding was discarded in favor of the HUD button")
-	enemy.Position=Vector3.new(5,0,0); tick(38)
+	for i=touchBefore+1,#sentTouches do if sentTouches[i].state==Enum.UserInputState.Begin and sentTouches[i].x==750 then dashRequested=true end end
+	check(dashRequested and #sentKeys==before,"mobile dash used a virtual Q or missed the touch control")
+	enemy.Position=Vector3.new(5,0,0);tick(38)
 	local requested={}
-	for i=before+1,#sentKeys do if sentKeys[i].down then requested[sentKeys[i].key]=true end end
-	check(requested[Enum.KeyCode.E] and requested[Enum.KeyCode.F] and requested[Enum.KeyCode.R],"reported AbilityIcon2/3/4 did not enter the skill rotation")
-	check(not requested[Enum.KeyCode.W],"unrelated RunW binding was pressed")
+	for i=touchBefore+1,#sentTouches do if sentTouches[i].state==Enum.UserInputState.Begin then requested[sentTouches[i].x]=true end end
+	check(requested[250] and requested[350] and requested[450],"reported AbilityIcon2/3/4 did not receive mobile touches")
+	check(#sentKeys==before,"mobile combat emitted keyboard input that can hide the joystick")
 	check(cosmetics==0,"cosmetic Activated callbacks took priority over confirmed skill/dash bindings")
 	check(punches>0 and releases==punches,"MouseButton1Down-only attack was not pressed/released")
 	local report=api.Diagnostics()
@@ -886,7 +892,7 @@ local function interfaceVisualInstinctChecks()
     check(hum.LastMove.Magnitude>0.9 and root.Position.Magnitude<=speed*0.051,"fallback did not request normal-speed movement")
     stepDefense(12)
     check(not api.Instinct.Dodging and hum.LastMove.Magnitude==0,"walking input remained held after a short sidestep")
-    check(root.Position.Magnitude<=speed*0.4 and hum.WalkSpeed==speed,"fallback exceeded its walking window or changed speed")
+    check(root.Position.Magnitude<=speed*0.55 and hum.WalkSpeed==speed,"fallback exceeded its walking window or changed speed")
     check(api.Instinct.Reactions==reactions+1,"unchanged attack continuously restarted the sidestep")
     place(Vector3.new());enemyChar:SetAttribute("m1Resolved",102);stepDefense(1)
     check(api.Instinct.LastCue=="Melee field: m1Resolved","stale lastSwing masked the independent m1Resolved field")
@@ -941,7 +947,7 @@ local function interfaceVisualInstinctChecks()
     check(api.Instinct.Dodging,"new cue did not start a walking fallback")
     local manual={UserInputType=Enum.UserInputType.Keyboard,KeyCode=Enum.KeyCode.W}
     input.InputBegan:Fire(manual,false);local userMove=Vector3.new(0.3,0,0.7);hum.LastMove=userMove;stepDefense(1)
-    check(api.Instinct.Dodging and hum.LastMove.Magnitude>0.9,"new manual input incorrectly cancelled the entire defense")
+    check(not api.Instinct.Dodging and hum.LastMove.Z==-1,"changed manual input did not take control immediately")
     stepDefense(5)
     check(not api.Instinct.Dodging and hum.LastMove.Z==-1,"bounded assist did not restore held keyboard movement")
     input.InputEnded:Fire(manual);hum.LastMove=Vector3.new();stepDefense(12)
@@ -989,18 +995,22 @@ local function interfaceVisualInstinctChecks()
     -- Live regression: held mobile joystick must not pause Ultra Instinct before any clearance attempt.
     moveVector=Vector3.new(1,0,0);place(Vector3.new());enemy.Position=Vector3.new(12,0,0)
     enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("lastSwing",200)
-    api.SetOption("UltraInstinct",true);stepDefense(1)
+    api.SetOption("InstinctRange",24);api.SetOption("UltraInstinct",true);stepDefense(1)
     local movingTouch={UserInputType=Enum.UserInputType.Touch,Position=Vector3.new(100,600,0)}
     input.InputBegan:Fire(movingTouch,false);local requests=api.Instinct.AutomaticMoves
     enemyChar:SetAttribute("lastSwing",201);stepDefense(1)
     check(api.Instinct.AutomaticMoves==requests+1 and api.Instinct.Attempts>0,"held joystick reproduced zero clearance/zero movement from the live report")
-    check(api.Instinct.Dodging and api.Instinct.LastAssistWindow<=0.18,"joystick assist was not short and bounded")
-    stepDefense(5)
+    check(api.Instinct.Dodging and api.Instinct.LastAssistWindow<=0.5,"joystick assist exceeded its bound")
+    stepDefense(11)
+    check(root.Position.Magnitude>=6 and root.Position.Magnitude<=10,"held-joystick escape remained a tiny sidestep or exceeded its cap")
+    check((root.Position-enemy.Position).Magnitude>12,"escape did not increase separation from the attacker")
     check(not api.Instinct.Dodging and hum.LastMove==moveVector and controls.controlsEnabled,"held joystick was not restored after the assist")
     local finished=api.Instinct.AutomaticMoves;stepDefense(8)
     check(api.Instinct.AutomaticMoves==finished,"held input continuously restarted defensive steering without a new attack")
     enemyChar:SetAttribute("castLocked",true);stepDefense(1)
     check(api.Instinct.AutomaticMoves==finished+1,"ability cue could not react while joystick remained held")
+    moveVector=Vector3.new(-1,0,0);stepDefense(1)
+    check(not api.Instinct.Dodging and hum.LastMove==moveVector,"changing the joystick direction did not cancel longer steering immediately")
     api.SetOption("UltraInstinct",false)
     check(not api.Instinct.Dodging and hum.LastMove==moveVector,"switching defense off did not immediately restore joystick direction")
     moveVector=Vector3.new();input.InputEnded:Fire(movingTouch);scripts:Destroy();enemyChar:SetAttribute("castLocked",nil)

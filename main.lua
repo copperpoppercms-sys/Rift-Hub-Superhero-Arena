@@ -62,7 +62,7 @@ return function(url)
 end
 end)()("https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/assets/rift_logo.jpg")
 local function normalize(value) return type(value)=="string" and value:lower():gsub("[^%w]","") or "" end
-local API={Game="Superhero Arena",Version="5.5",Enabled=false,Target=nil,Status="Off"}
+local API={Game="Superhero Arena",Version="5.6",Enabled=false,Target=nil,Status="Off"}
 local Config={ESP=true,Chams=true,Names=true,Roles=true,ChamOpacity=0.45,GuessRoles=true,
     UltraInstinct=false,InstinctRange=16,InstinctMaxDistance=10,ReduceMotion=false}
 API.Config=Config
@@ -103,6 +103,7 @@ local function release(press)
 end
 local function releaseAll() for press in pairs(held) do release(press) end end
 local function pulseKey(key,holdTime)
+    if Input.TouchEnabled then return false,"Touch mode: use the mobile game control" end
 	if not vim then return false,"Key input unavailable" end
 	for press in pairs(held) do if press.Key==key then release(press) end end
 	local ok,err=pcall(function() vim:SendKeyEvent(true,key,false,game) end)
@@ -117,8 +118,6 @@ local readControls,lastControlsTry=nil,-math.huge
 local manualKeys,manualTouches={},{}
 local function restoreControls() end
 local function manualMovement()
-    for _ in pairs(manualKeys) do return true end
-    for _ in pairs(manualTouches) do return true end
     if not readControls and os.clock()-lastControlsTry>1 then
         lastControlsTry=os.clock()
         pcall(function()
@@ -127,23 +126,30 @@ local function manualMovement()
             if module then readControls=require(module):GetControls() end
         end)
     end
+    for _ in pairs(manualKeys) do return true end
+    for _ in pairs(manualTouches) do return true end
     local moving=false
     if readControls then pcall(function() moving=readControls:GetMoveVector().Magnitude>0.05 end) end
     return moving
 end
-local function resumeUserMovement(hum)
-    -- Roblox GetMoveVector is camera-relative. Restore the live input, never a saved direction.
+local function movementIntent()
+    manualMovement() -- Resolve ControlModule even if a thumb/key was held when the script loaded.
     if readControls then
         local ok,vector=pcall(function() return readControls:GetMoveVector() end)
-        if ok and vector then hum:Move(vector,true);return end
+        if ok and vector then return vector end
     end
     local function heldKey(a,b) return manualKeys[a] or manualKeys[b] end
     local x=(heldKey(Enum.KeyCode.D,Enum.KeyCode.Right) and 1 or 0)-(heldKey(Enum.KeyCode.A,Enum.KeyCode.Left) and 1 or 0)
     local z=(heldKey(Enum.KeyCode.S,Enum.KeyCode.Down) and 1 or 0)-(heldKey(Enum.KeyCode.W,Enum.KeyCode.Up) and 1 or 0)
     local vector=Vector3.new(x,0,z)
     if vector.Magnitude>1 then vector=vector.Unit end
-    if vector.Magnitude>0 then hum:Move(vector,true) end
-    -- If touch controls cannot be read, their next normal frame resumes them; ControlModule stays enabled.
+    if vector.Magnitude>0 then return vector end
+    if next(manualTouches)==nil then return Vector3.new() end
+    return nil -- Unknown touch direction; normal ControlModule resumes it next frame.
+end
+local function resumeUserMovement(hum)
+    local vector=movementIntent()
+    if vector then hum:Move(vector,true) end
 end
 local clearCombo,combatBrain,groupTarget
 local targetPolicy={HoldUntil=0,ReviewAt=0,GroupSince=nil,Previous=nil,PreviousUntil=0,LastSwitch=0}
@@ -296,13 +302,14 @@ local function tapButton(button)
 		local press={Touch=touchSequence,X=x,Y=y}
 		local ok=pcall(function() vim:SendTouchEvent(press.Touch,Enum.UserInputState.Begin,x,y) end)
 		if ok then API.LastInput="Touch requested: "..button:GetFullName(); held[press]=true; task.delay(0.06,function() release(press) end); return true end
+        return false,"Executor blocked touch input"
 	end
 	local ok=pcall(function() vim:SendMouseButtonEvent(x,y,0,true,game,0) end)
 	if ok then API.LastInput="Click requested: "..button:GetFullName(); local press={X=x,Y=y}; held[press]=true; task.delay(0.06,function() release(press) end); return true end
 	return false,"Executor blocked game button input"
 end
 local function ready(item)
-	if item and item.Action then return vim~=nil end
+	if item and item.Action then return not Input.TouchEnabled and vim~=nil end
 	local b=item and item.Button
 	if not b or not visible(b) or b:GetAttribute("OnCooldown")==true or b:GetAttribute("Ready")==false or b:GetAttribute("Available")==false or b:GetAttribute("Unlocked")==false or (tonumber(b:GetAttribute("CooldownRemaining")) or 0)>0 then return false end
 	if type(firesignal)=="function" then
@@ -330,6 +337,9 @@ local function fire(item)
 	local button=item.Button
 	-- Use the binding actually displayed on AbilityIconN, not a guessed hotkey.
 	local key=item.Key or item.NativeKey
+    -- A virtual Q/E/etc can switch Roblox's preferred input to keyboard and hide TouchGui.
+    -- Use an actual mobile button touch for controls with bindings, including InputBegan-only handlers.
+    if Input.TouchEnabled and key then return tapButton(button) end
 	if key and (item.Slot or item.NativeKey) then
 		local ok=pulseKey(key,math.clamp(tonumber(button:GetAttribute("InputHoldTime")) or 0.05,0.03,2))
 		if ok then return true end
@@ -1284,8 +1294,8 @@ return function(ctx)
             "Last automatic decision: "..M.LastDecision,
             "Movement requests: native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
-            "Movement observation: "..M.Motion,
-            "Manual movement present: "..tostring(ctx.ManualMovement()).." | last assist window="..tostring(M.LastAssistWindow).." seconds (0.18 while moving)","Rejected destinations:"}
+            "Movement observation: "..M.Motion.." | last observed travel="..tostring(M.LastObservedTravel),
+            "Manual movement present: "..tostring(ctx.ManualMovement()).." | last assist window="..tostring(M.LastAssistWindow).." seconds (up to 0.5; changed input cancels)","Rejected destinations:"}
         local reasons={};for reason,count in pairs(blocks) do table.insert(reasons,reason.." = "..count) end;table.sort(reasons)
         for _,line in ipairs(reasons) do table.insert(lines,line) end
         if M.EncounterStart then
@@ -1339,9 +1349,9 @@ return function(ctx)
     function M.Steer()
         if not motion or not M.Dodging then return end
         if not ctx.CanRun() then M.Stop();M.Status="Paused for input or camera";return end
-        if ctx.ManualMovement() and not motion.MovingAssist then
-            motion.MovingAssist=true;holdUntil=math.min(holdUntil,clock+0.18)
-            motion.WallUntil=math.min(motion.WallUntil,os.clock()+0.18)
+        local intent=ctx.MovementIntent()
+        if intent and motion.Intent and (intent-motion.Intent).Magnitude>0.35 then
+            M.Stop();M.Status="Your changed movement input took control";return
         end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute("canRun")==false then M.Stop();return end
@@ -1565,8 +1575,8 @@ return function(ctx)
         M.Stop()
         local direction=offset.Unit
         local moving=ctx.ManualMovement()
-        local window=math.min(distance/speed,moving and 0.18 or 0.35)
-        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,MovingAssist=moving,WallUntil=os.clock()+window}
+        local window=math.min(distance/speed,0.5)
+        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,MovingAssist=moving,Intent=ctx.MovementIntent(),WallUntil=os.clock()+window}
         M.LastAssistWindow=window
         M.Dodging=true
         -- Set a normal walking direction before requesting the game's dash input.
@@ -1610,6 +1620,7 @@ return function(ctx)
         if not probe.Root.Parent or current~=probe.Root then M.Motion="Character changed before observation";probe=nil;return end
         local elapsed=clock-probe.At
         local progress=(probe.Root.Position-probe.Start):Dot(probe.Direction)
+        M.LastObservedTravel=math.max(0,progress)
         if not probe.Checked and elapsed>=0.12 then
             probe.Checked=true;probe.Moved=progress>probe.Distance*0.35
             M.Motion=probe.Moved and "Local displacement observed; server acceptance unverified" or "No walking progress observed (blocked, movement lock or correction)"
@@ -1716,9 +1727,15 @@ return function(ctx)
         local toward=Vector3.new(bestRoot.Position.X-root.Position.X,0,bestRoot.Position.Z-root.Position.Z)
         if toward.Magnitude<0.2 then return end;toward=toward.Unit
         local side=Vector3.new(-toward.Z,0,toward.X)
-        local candidates={side,side*(-1),(side-toward*0.4).Unit,(side*(-1)-toward*0.4).Unit,toward*(-1)}
+        local candidates
+        if bestRecord.Cue.Ability then
+            candidates={(side-toward*0.8).Unit,(side*(-1)-toward*0.8).Unit,toward*(-1),side,side*(-1)}
+        else
+            candidates={(side-toward*0.5).Unit,(side*(-1)-toward*0.5).Unit,side,side*(-1),toward*(-1)}
+        end
         local reason=bestRecord.Cue.Reason
-        for _,length in ipairs({6,4,3}) do
+        local preferred=math.min(bestRecord.Cue.Ability and 10 or 8,ctx.Config.InstinctMaxDistance)
+        for _,length in ipairs({preferred,8,6,4,3}) do
             if length<=ctx.Config.InstinctMaxDistance then
                 for _,direction in ipairs(candidates) do
                     local goal=root.Position+direction*length;local outside=true
@@ -1795,7 +1812,7 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.5",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 5.6",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
@@ -1872,7 +1889,7 @@ return function(ctx)
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
-    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready; otherwise briefly sidesteps at your current walking speed. Respects dash cooldowns. While you run, assists steering for at most 0.18 sec, then returns to your current input. Attack cues and visible bounds cannot guarantee avoidance.")
+    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready; otherwise briefly sidesteps at your current walking speed. Respects dash cooldowns. Walks toward a larger clear escape for up to 0.5 sec. Changing your joystick direction takes control immediately. Attack cues and visible bounds cannot guarantee avoidance.")
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
     slider(defense,"InstinctRange","Nearby attack range",6,24)
     slider(defense,"InstinctMaxDistance","Sidestep limit",4,12)
@@ -1981,7 +1998,7 @@ end
 local started,startError=pcall(function()
     API.Visuals=MakeVisuals({Config=Config,Gui=gui,Body=body})
     API.ResolveHero=API.Visuals.Resolve
-    API.Instinct=MakeInstinct({Config=Config,Body=body,Opposing=opposing,Sight=lineOfSight,ManualMovement=manualMovement,ResumeMovement=resumeUserMovement,NativeDash=defensiveDash,
+    API.Instinct=MakeInstinct({Config=Config,Body=body,Opposing=opposing,Sight=lineOfSight,ManualMovement=manualMovement,ResumeMovement=resumeUserMovement,MovementIntent=movementIntent,NativeDash=defensiveDash,
         CanRun=function()
             local camera=workspace.CurrentCamera
             if not alive then return false,"Hub unloaded" end

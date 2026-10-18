@@ -46,8 +46,8 @@ return function(ctx)
             "Last automatic decision: "..M.LastDecision,
             "Movement requests: native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
-            "Movement observation: "..M.Motion,
-            "Manual movement present: "..tostring(ctx.ManualMovement()).." | last assist window="..tostring(M.LastAssistWindow).." seconds (0.18 while moving)","Rejected destinations:"}
+            "Movement observation: "..M.Motion.." | last observed travel="..tostring(M.LastObservedTravel),
+            "Manual movement present: "..tostring(ctx.ManualMovement()).." | last assist window="..tostring(M.LastAssistWindow).." seconds (up to 0.5; changed input cancels)","Rejected destinations:"}
         local reasons={};for reason,count in pairs(blocks) do table.insert(reasons,reason.." = "..count) end;table.sort(reasons)
         for _,line in ipairs(reasons) do table.insert(lines,line) end
         if M.EncounterStart then
@@ -101,9 +101,9 @@ return function(ctx)
     function M.Steer()
         if not motion or not M.Dodging then return end
         if not ctx.CanRun() then M.Stop();M.Status="Paused for input or camera";return end
-        if ctx.ManualMovement() and not motion.MovingAssist then
-            motion.MovingAssist=true;holdUntil=math.min(holdUntil,clock+0.18)
-            motion.WallUntil=math.min(motion.WallUntil,os.clock()+0.18)
+        local intent=ctx.MovementIntent()
+        if intent and motion.Intent and (intent-motion.Intent).Magnitude>0.35 then
+            M.Stop();M.Status="Your changed movement input took control";return
         end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute("canRun")==false then M.Stop();return end
@@ -327,8 +327,8 @@ return function(ctx)
         M.Stop()
         local direction=offset.Unit
         local moving=ctx.ManualMovement()
-        local window=math.min(distance/speed,moving and 0.18 or 0.35)
-        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,MovingAssist=moving,WallUntil=os.clock()+window}
+        local window=math.min(distance/speed,0.5)
+        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,MovingAssist=moving,Intent=ctx.MovementIntent(),WallUntil=os.clock()+window}
         M.LastAssistWindow=window
         M.Dodging=true
         -- Set a normal walking direction before requesting the game's dash input.
@@ -372,6 +372,7 @@ return function(ctx)
         if not probe.Root.Parent or current~=probe.Root then M.Motion="Character changed before observation";probe=nil;return end
         local elapsed=clock-probe.At
         local progress=(probe.Root.Position-probe.Start):Dot(probe.Direction)
+        M.LastObservedTravel=math.max(0,progress)
         if not probe.Checked and elapsed>=0.12 then
             probe.Checked=true;probe.Moved=progress>probe.Distance*0.35
             M.Motion=probe.Moved and "Local displacement observed; server acceptance unverified" or "No walking progress observed (blocked, movement lock or correction)"
@@ -478,9 +479,15 @@ return function(ctx)
         local toward=Vector3.new(bestRoot.Position.X-root.Position.X,0,bestRoot.Position.Z-root.Position.Z)
         if toward.Magnitude<0.2 then return end;toward=toward.Unit
         local side=Vector3.new(-toward.Z,0,toward.X)
-        local candidates={side,side*(-1),(side-toward*0.4).Unit,(side*(-1)-toward*0.4).Unit,toward*(-1)}
+        local candidates
+        if bestRecord.Cue.Ability then
+            candidates={(side-toward*0.8).Unit,(side*(-1)-toward*0.8).Unit,toward*(-1),side,side*(-1)}
+        else
+            candidates={(side-toward*0.5).Unit,(side*(-1)-toward*0.5).Unit,side,side*(-1),toward*(-1)}
+        end
         local reason=bestRecord.Cue.Reason
-        for _,length in ipairs({6,4,3}) do
+        local preferred=math.min(bestRecord.Cue.Ability and 10 or 8,ctx.Config.InstinctMaxDistance)
+        for _,length in ipairs({preferred,8,6,4,3}) do
             if length<=ctx.Config.InstinctMaxDistance then
                 for _,direction in ipairs(candidates) do
                     local goal=root.Position+direction*length;local outside=true
