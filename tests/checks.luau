@@ -281,7 +281,7 @@ local function findName(root,name)
 	for _,child in ipairs(root:GetChildren()) do local result=findName(child,name); if result then return result end end
 end
 local api=boot()
-check(api.Version=="5.3" and not api.Enabled,"auto play should start off")
+check(api.Version=="5.4" and not api.Enabled,"auto play should start off")
 local play=findName(api.Gui,"Play")
 check(play and play.Text=="PLAY","one Play button missing")
 check(findName(api.Gui,"Tab_combat") and findName(api.Gui,"Tab_visuals") and findName(api.Gui,"Tab_settings"),"full interface tabs missing")
@@ -847,179 +847,131 @@ local function interfaceVisualInstinctChecks()
     findName(api.Gui,"Minimize").Activated:Fire();check(not api.UI.Window.Visible and findName(api.Gui,"Restore").Visible,"minimize failed")
     findName(api.Gui,"Restore").Activated:Fire();check(api.UI.Window.Visible,"mobile logo did not reopen the hub")
     camera.ViewportSize=Vector2.new(1280,720);api.UI.Step()
-    -- Geometry-capable CFrame methods for the one-shot escape tests.
+    -- Simulate normal walking physics; scripts must only supply direction/input.
     local makeFrame=CFrame.lookAt
     CFrame.lookAt=function(position,point)
         local frame=makeFrame(position,point)
         function frame:VectorToObjectSpace(v)
-            local look=self.LookVector;local right=Vector3.new(-look.Z,0,look.X).Unit
-            return Vector3.new(v:Dot(right),v.Y,-v:Dot(look))
+            local right=Vector3.new(-self.LookVector.Z,0,self.LookVector.X).Unit
+            return Vector3.new(v:Dot(right),v.Y,-v:Dot(self.LookVector))
         end
         function frame:PointToObjectSpace(v) return self:VectorToObjectSpace(v-self.Position) end
         return frame
     end
     CFrame.new=function(position) return CFrame.lookAt(position,position+Vector3.new(0,0,-1)) end
-    root.Size=Vector3.new(2,2,1)
     local function place(position)
         root.Position=position;root.CFrame=CFrame.lookAt(position,position+Vector3.new(1,0,0))
     end
-    local function stepDefense(count)
-        for _=1,count do api.Step(0.1);root.Position=root.CFrame.Position;renderAim(0.1) end
+    local function stepDefense(count,physics)
+        local untouched=true
+        for _=1,count do
+            local before=root.CFrame;api.Step(0.05);renderAim(0.05)
+            untouched=untouched and root.CFrame==before
+            if physics~=false and api.Instinct.Dodging and hum.LastMove then
+                place(root.Position+hum.LastMove*hum.WalkSpeed*0.05)
+            end
+        end
+        check(untouched,"defense wrote a character CFrame instead of requesting native movement")
     end
-    place(Vector3.new());enemy.Position=Vector3.new(8,0,0);enemy.CFrame=CFrame.lookAt(enemy.Position,root.Position)
-    enemyChar:SetAttribute("lastSwing",100);enemyChar:SetAttribute("state","neutral")
-    local userMove=Vector3.new(0.5,0,0);hum.LastMove=userMove
+    local hud2=node("ScreenGui","HUD_Mobile",localPlayer:FindFirstChild("PlayerGui"))
+    local dash=node("TextButton","DashButton",hud2);dash:SetAttribute("OnCooldown",true);dash:SetAttribute("CooldownDuration",2.5)
+    local dashes=0;dash.Activated:Connect(function() dashes+=1 end)
+    place(Vector3.new());hum.WalkSpeed=16;hum.LastMove=Vector3.new()
+    enemy.Position=Vector3.new(8,0,0);enemyChar:SetAttribute("lastSwing",100);enemyChar:SetAttribute("m1Resolved",nil)
     api.SetOption("UltraInstinct",true);stepDefense(1)
+    local speed=hum.WalkSpeed;local reactions=api.Instinct.Reactions
     enemyChar:SetAttribute("lastSwing",101);stepDefense(1)
-    check(api.Instinct.Reactions==1 and not api.Enabled,"nearby attack did not trigger an independent dodge")
-    check(api.Instinct.LastDistance<=10 and root.Position.Magnitude>0 and hum.LastMove==userMove,"short dodge held movement or exceeded local cap")
-    check(api.Instinct.LastMode=="Short dodge · hitbox unknown","unknown geometry was incorrectly described as a confirmed hitbox escape")
-    local after=root.Position
-    stepDefense(12);check(api.Instinct.Reactions==1 and (root.Position-after).Magnitude<0.01,"unchanged attack caused repeated movement")
-    api.SetOption("UltraInstinct",false);check(hum.LastMove==userMove and not api.Instinct.Dodging,"turning defense off canceled manual movement")
-    local effects=node("Folder","Projectiles",workspace)
-    local function hazard(name,position,size,owner,queryable)
-        local part=node("Part",name,effects);part.Position=position;part.Size=size;part.CFrame=CFrame.lookAt(position,position+Vector3.new(1,0,1))
-        part.CanCollide=false;part.CanQuery=queryable~=false;part:SetAttribute("IsAttack",true)
-        if owner then part:SetAttribute("OwnerUserId",owner.UserId) end
-        return part
-    end
-    -- Escape a rotated, active volume even if the caster is facing away.
-    place(Vector3.new());enemy.CFrame=CFrame.lookAt(enemy.Position,enemy.Position+Vector3.new(1,0,0))
-    local hitbox=hazard("AbilityHitbox",Vector3.new(),Vector3.new(6,4,6),other,true)
-    queryParts={hitbox};api.SetOption("UltraInstinct",true);local before=api.Instinct.Reactions;stepDefense(1)
-    local localPoint=hitbox.CFrame:PointToObjectSpace(root.Position)
-    check(api.Instinct.Reactions==before+1 and api.Instinct.LastMode=="Local hitbox escape","nearby real hitbox was ignored")
-    check(math.abs(localPoint.X)>hitbox.Size.X/2+root.Size.X/2+0.7 or math.abs(localPoint.Z)>hitbox.Size.Z/2+root.Size.Z/2+0.7,"destination stayed in expanded attack volume")
-    check(api.Instinct.LastDistance<=10 and hum.LastMove==userMove,"hitbox escape exceeded cap or canceled joystick input")
-    after=root.Position;stepDefense(10);check((root.Position-after).Magnitude<0.01,"active volume caused repeated teleporting after escape")
-    api.SetOption("UltraInstinct",false);hitbox:Destroy();queryParts={}
-    -- Own attacks, inactive volumes and static map parts cannot trigger escapes.
-    place(Vector3.new());local ownHit=hazard("AbilityHitbox",Vector3.new(),Vector3.new(6,4,6),localPlayer,true)
-    queryParts={ownHit};api.SetOption("UltraInstinct",true);before=api.Instinct.Reactions;stepDefense(2)
-    check(api.Instinct.Reactions==before,"own ability caused a dodge")
-    api.SetOption("UltraInstinct",false);ownHit:Destroy();queryParts={}
-    local inactive=hazard("AbilityHitbox",Vector3.new(),Vector3.new(6,4,6),other,true);inactive:SetAttribute("Active",false)
-    queryParts={inactive};api.SetOption("UltraInstinct",true);stepDefense(2)
-    check(api.Instinct.Reactions==before,"inactive hitbox caused a dodge")
-    api.SetOption("UltraInstinct",false);inactive:Destroy();queryParts={}
-    -- Oversized attacks are rejected instead of transporting the player across the map.
-    local giant=hazard("AttackHitbox",Vector3.new(),Vector3.new(100,20,100),other,true)
-    queryParts={giant};api.SetOption("UltraInstinct",true);stepDefense(1)
-    check(api.Instinct.Reactions==before and root.Position.Magnitude<0.01,"large attack escaped beyond the local cap")
-    api.SetOption("UltraInstinct",false);giant:Destroy();queryParts={}
-    -- Non-queryable effects spawned during play use DescendantAdded.
-    api.SetOption("UltraInstinct",true);stepDefense(1)
-    local nonquery=hazard("AbilityHitbox",Vector3.new(),Vector3.new(4,4,4),other,false)
-    workspace.DescendantAdded:Fire(nonquery);stepDefense(1)
-    check(api.Instinct.Reactions==before+1,"non-queryable new attack was not observed")
-    api.SetOption("UltraInstinct",false);nonquery:Destroy();place(Vector3.new());queryParts={}
-    -- Parts whose names/attributes arrive after parenting are also detected.
-    api.SetOption("UltraInstinct",true);stepDefense(1);before=api.Instinct.Reactions
-    local late=node("Part","Part",effects);late.Size=Vector3.new(4,4,4);late.Position=Vector3.new();late.CFrame=CFrame.new(late.Position);late.CanQuery=false;late.CanCollide=false
-    workspace.DescendantAdded:Fire(late)
-    late.Name="AbilityHitbox";late:SetAttribute("OwnerUserId",other.UserId);late:SetAttribute("IsAttack",true)
-    stepDefense(1);check(api.Instinct.Reactions==before+1,"late attack metadata was ignored")
-    api.SetOption("UltraInstinct",false);late:Destroy();place(Vector3.new());queryParts={}
-    -- Blocked exits, missing ground, and typing leave movement untouched.
-    local blocked=hazard("AbilityHitbox",Vector3.new(),Vector3.new(4,4,4),other,true);queryParts={blocked}
-    ground=false;api.SetOption("UltraInstinct",true);before=api.Instinct.Reactions;stepDefense(1)
-    check(api.Instinct.Reactions==before and root.Position.Magnitude==0,"escape moved onto unverified ground")
-    ground=true;wall=true;stepDefense(2);check(api.Instinct.Reactions==before,"escape crossed a solid obstruction")
-    wall=false;destinationBlocked=true;stepDefense(2);check(api.Instinct.Reactions==before,"escape ended in a solid part")
-    destinationBlocked=false;focusedBox={};stepDefense(2);check(api.Instinct.Reactions==before,"escape ran while typing");focusedBox=nil
-    api.SetOption("UltraInstinct",false);blocked:Destroy();queryParts={};effects:Destroy()
-    -- Regression: one stale attack source cannot hide another source, including nil -> first value.
-    place(Vector3.new());enemy.Position=Vector3.new(8,0,0)
-    enemyChar:SetAttribute("lastSwing",200);enemyChar:SetAttribute("m1Resolved",nil)
-    api.SetOption("UltraInstinct",true);stepDefense(1);before=api.Instinct.Reactions
-    enemyChar:SetAttribute("m1Resolved",201);stepDefense(1)
-    check(api.Instinct.Reactions==before+1 and api.Instinct.LastCue=="Melee field: m1Resolved","lastSwing masked m1Resolved or its first value")
-    stepDefense(8);place(Vector3.new());enemyChar:SetAttribute("lastSwing",202);stepDefense(1)
-    check(api.Instinct.Reactions==before+2,"independent lastSwing source stopped working")
-    stepDefense(8);place(Vector3.new());before=api.Instinct.Reactions
-    -- A short state that starts and ends before Heartbeat is retained by the attribute listener.
+    check(api.Instinct.Reactions==reactions+1 and dashes==0,"dash cooldown prevented the normal walking fallback or fired a dash")
+    check(api.Instinct.LastMode:find("Walking sidestep",1,true) and api.Instinct.LastDash:find("cooldown",1,true),"fallback mode does not explain the dash cooldown")
+    check(hum.LastMove.Magnitude>0.9 and root.Position.Magnitude<=speed*0.051,"fallback did not request normal-speed movement")
+    stepDefense(12)
+    check(not api.Instinct.Dodging and hum.LastMove.Magnitude==0,"walking input remained held after a short sidestep")
+    check(root.Position.Magnitude<=speed*0.4 and hum.WalkSpeed==speed,"fallback exceeded its walking window or changed speed")
+    check(api.Instinct.Reactions==reactions+1,"unchanged attack continuously restarted the sidestep")
+    place(Vector3.new());enemyChar:SetAttribute("m1Resolved",102);stepDefense(1)
+    check(api.Instinct.LastCue=="Melee field: m1Resolved","stale lastSwing masked the independent m1Resolved field")
+    stepDefense(12);place(Vector3.new());reactions=api.Instinct.Reactions
     enemyChar:SetAttribute("state","casting");enemyChar:SetAttribute("state","neutral");stepDefense(1)
-    check(api.Instinct.Reactions==before+1,"short attack transition was lost between heartbeats")
-    stepDefense(8);place(Vector3.new());before=api.Instinct.Reactions
-    wall=true;enemyChar:SetAttribute("lastSwing",203);stepDefense(1)
-    check(api.Instinct.Reactions==before and api.Instinct.Diagnostics():find("Path blocked by",1,true),"blocked destinations lack actionable diagnostics")
-    wall=false;stepDefense(2)
-    check(api.Instinct.Reactions==before+1,"a blocked path prematurely consumed the attack cue")
-    api.SetOption("UltraInstinct",false);stepDefense(8);place(Vector3.new());before=api.Instinct.Reactions
-    findName(api.Gui,"RecordDodge").Activated:Fire();stepDefense(1)
-    enemyChar:SetAttribute("state","casting");enemyChar:SetAttribute("state","neutral")
-    local animation=node("Animation","Animation");animation.AnimationId="rbxassetid://123456"
-    local track=node("AnimationTrack","Unnamed");track.Animation=animation;track.Priority=Enum.AnimationPriority.Action
-    enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator").AnimationPlayed:Fire(track)
-    local observed=node("Part","UnfamiliarEffect",workspace);observed.Position=Vector3.new();observed.Size=Vector3.new(2,2,2)
-    workspace.DescendantAdded:Fire(observed);stepDefense(1)
-    local report=api.Instinct.Diagnostics()
-    check(api.Instinct.Reactions==before,"record-only mode made an automatic move")
-    check(report:find("123456",1,true) and report:find("UnfamiliarEffect",1,true) and report:find("state=casting",1,true),"encounter recorder lost unknown animation, part or transient fields")
-    stepDefense(101);check(not api.Instinct.Recording,"encounter recorder exceeded its time limit")
-    check(api.Instinct.Diagnostics():find("Encounter recording complete",1,true),"completed recording discarded events")
-    ground=false;local ok=api.Instinct.TestDodge()
-    check(not ok and api.Instinct.LastBlock=="No ground below destination","test bypassed ground clearance")
-    ground=true;destinationBlocked=true
-    ok=api.Instinct.TestDodge();check(not ok and api.Instinct.LastBlock:find("Destination",1,true),"blocked destination did not identify the solid part")
-    destinationBlocked=false
-    local oldBounds=workspace.GetPartBoundsInBox
-    workspace.GetPartBoundsInBox=function() error("simulated unsupported bounds query") end
-    ok=api.Instinct.TestDodge();check(not ok and api.Instinct.LastBlock:find("Destination query failed",1,true),"unsupported clearance query silently allowed a move")
-    workspace.GetPartBoundsInBox=oldBounds
-    place(Vector3.new());findName(api.Gui,"TestDodge").Activated:Fire()
-    check(api.Instinct.Reactions==before+1 and api.Instinct.LastDistance==4,"explicit test did not use the bounded shared move path")
-    root.Position=root.CFrame.Position;stepDefense(2)
-    check(api.Instinct.Motion:find("Local displacement observed",1,true),"move report did not observe actual local displacement")
-    place(Vector3.new());stepDefense(6)
-    check(api.Instinct.Motion:find("Returned near start",1,true),"return toward the origin was not reported")
-    place(Vector3.new());api.Instinct.TestDodge();place(Vector3.new());stepDefense(2)
-    check(api.Instinct.Motion:find("Move not retained",1,true),"a rejected position write was labelled as a confirmed dodge")
-    local copied=api.CopyDodgeReport()
-    check(copied:find("5.3",1,true) and copied:find("Ultra Instinct live report",1,true),"dedicated dodge copy report missing")
-    animation:Destroy();track:Destroy();observed:Destroy();api.SetOption("UltraInstinct",false)
-    -- Replay the live report: neutral, busy=false, canAttack=true, Action4 and castLocked.
-    stepDefense(8);place(Vector3.new());enemy.Position=Vector3.new(20,0,0)
-    enemyChar:SetAttribute("busy",false);enemyChar:SetAttribute("canAttack",true)
-    enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("castLocked",false)
-    api.SetOption("InstinctRange",24);api.SetOption("UltraInstinct",true);stepDefense(1)
-    local auto=api.Instinct.AutomaticMoves;local tests=api.Instinct.TestMoves
+    check(api.Instinct.Reactions==reactions+1,"short attack transitions disappeared between heartbeats")
+    stepDefense(12);place(Vector3.new());enemy.Position=Vector3.new(20,0,0)
+    enemyChar:SetAttribute("busy",false);enemyChar:SetAttribute("canAttack",true);enemyChar:SetAttribute("castLocked",false)
+    api.SetOption("InstinctRange",24);reactions=api.Instinct.Reactions
     enemyChar:SetAttribute("castLocked",true);stepDefense(1)
-    check(api.Instinct.AutomaticMoves==auto+1 and api.Instinct.TestMoves==tests,"live-report castLocked with busy=false failed to trigger an automatic dodge")
-    check(api.Instinct.LastCue:find("castLocked",1,true),"cast-lock cue lost its estimated source")
-    stepDefense(8);check(api.Instinct.AutomaticMoves==auto+1,"sustained cast lock repeatedly teleported the character")
-    place(Vector3.new());auto=api.Instinct.AutomaticMoves
-    local unnamed=node("Animation","Animation");unnamed.AnimationId="rbxassetid://83127346512820"
-    local action=node("AnimationTrack","Animation");action.Animation=unnamed;action.Priority=Enum.AnimationPriority.Action4
-    enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator").AnimationPlayed:Fire(action)
-    stepDefense(1)
-    check(api.Instinct.AutomaticMoves==auto+1,"unnamed Action4 under castLocked was ignored without busy")
-    stepDefense(8);place(Vector3.new());enemyChar:SetAttribute("castLocked",false);stepDefense(1)
-    auto=api.Instinct.AutomaticMoves;enemyChar:SetAttribute("state","skill");stepDefense(1)
-    check(api.Instinct.AutomaticMoves==auto+1,"reported state=skill was not treated as an ability cue")
-    stepDefense(8);place(Vector3.new());enemyChar:SetAttribute("state","neutral")
-    enemy.Position=Vector3.new(10.1,0,0);auto=api.Instinct.AutomaticMoves
-    enemyChar:SetAttribute("lastSwing",204);stepDefense(1)
-    check(api.Instinct.AutomaticMoves==auto+1,"configured range was ignored by melee just beyond the old ten-stud cap")
-    stepDefense(8);place(Vector3.new());enemy.Position=Vector3.new(25,0,0);auto=api.Instinct.AutomaticMoves
-    enemyChar:SetAttribute("lastSwing",205);stepDefense(1)
-    check(api.Instinct.AutomaticMoves==auto and api.Instinct.LastDecision=="Outside configured nearby range","outside-range cue moved the player or was silently discarded")
-    stepDefense(8);place(Vector3.new());enemy.Position=Vector3.new(10,0,0);wall=true
-    enemyChar:SetAttribute("lastSwing",206);stepDefense(1)
-    check(api.Instinct.AutomaticMoves==auto and api.Instinct.LastDecision=="Attacker hidden by solid obstruction","occluded cue was not explained")
-    wall=false;stepDefense(8);place(Vector3.new());enemy.Position=Vector3.new(20,0,0);auto=api.Instinct.AutomaticMoves
-    action.Priority=Enum.AnimationPriority.Movement
+    check(api.Instinct.Reactions==reactions+1,"reported castLocked with busy=false failed to trigger fallback")
+    stepDefense(12);place(Vector3.new());reactions=api.Instinct.Reactions
+    local animation=node("Animation","Animation");animation.AnimationId="rbxassetid://83127346512820"
+    local action=node("AnimationTrack","Animation");action.Animation=animation;action.Priority=Enum.AnimationPriority.Action4
     enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator").AnimationPlayed:Fire(action);stepDefense(1)
-    check(api.Instinct.AutomaticMoves==auto,"generic locomotion animation triggered a dodge")
-    action.Priority=Enum.AnimationPriority.Action4
+    check(api.Instinct.Reactions==reactions+1,"Action4 with castLocked and busy=false was ignored")
+    stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("castLocked",false);reactions=api.Instinct.Reactions
+    enemyChar:SetAttribute("state","skill");stepDefense(1)
+    check(api.Instinct.Reactions==reactions+1,"state=skill was ignored")
+    stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("state","neutral");enemy.Position=Vector3.new(10.1,0,0);reactions=api.Instinct.Reactions
+    enemyChar:SetAttribute("lastSwing",103);stepDefense(1)
+    check(api.Instinct.Reactions==reactions+1,"melee retained the hidden ten-stud cutoff")
+    stepDefense(12);place(Vector3.new());enemy.Position=Vector3.new(25,0,0);reactions=api.Instinct.Reactions
+    enemyChar:SetAttribute("lastSwing",104);stepDefense(1)
+    check(api.Instinct.Reactions==reactions and api.Instinct.LastDecision=="Outside configured nearby range","out-of-range attack moved the character or lacked a reason")
+    stepDefense(12);place(Vector3.new());enemy.Position=Vector3.new(8,0,0)
+    -- Native dash is requested once when ready; later cues use walking during the shared cooldown.
+    dash:SetAttribute("OnCooldown",false);api.RefreshControls();enemyChar:SetAttribute("lastSwing",105);stepDefense(1)
+    check(dashes==1 and api.Instinct.NativeDashes==1,"ready native dash was not requested through the detected control")
+    check(api.Instinct.LastMode=="Native dash requested","native input was reported as a walking fallback")
+    stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",106);stepDefense(1)
+    check(dashes==1 and api.Instinct.LastMode:find("Walking sidestep",1,true),"native cooldown was spammed instead of using the fallback")
+    stepDefense(60);place(Vector3.new());enemyChar:SetAttribute("lastSwing",107);stepDefense(1)
+    check(dashes==2,"native dash failed to become requestable after cooldown")
+    stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",107.5);stepDefense(1,false)
+    check(hum.LastMove.Magnitude>0.9,"native dash request cooldown had no walking fallback when no displacement occurred")
+    stepDefense(12,false);check(not api.Instinct.Dodging and hum.LastMove.Magnitude==0,"zero progress left steering stuck")
+    stepDefense(60);place(Vector3.new())
+    local oldRay=workspace.Raycast
+    workspace.Raycast=function(self,origin,direction,params)
+        if math.abs(direction.Y)<0.01 and direction.Magnitude>8.5 then return {Instance=workspace} end
+        return oldRay(self,origin,direction,params)
+    end
+    enemyChar:SetAttribute("lastSwing",107.75);stepDefense(1)
+    check(not api.LastError and api.Instinct.LastDash=="Native dash path obstructed" and api.Instinct.LastMode:find("Walking sidestep",1,true),"blocked native dash path threw on a missing target or prevented shorter walking fallback")
+    workspace.Raycast=oldRay
+    stepDefense(12);dash:SetAttribute("OnCooldown",true);place(Vector3.new());reactions=api.Instinct.Reactions
+    -- Game movement locks, manual input, typing and an obstruction cancel our short steering window.
+    ch:SetAttribute("canRun",false);enemyChar:SetAttribute("lastSwing",108);stepDefense(1)
+    check(api.Instinct.Reactions==reactions and not api.Instinct.Dodging,"fallback ignored the game's movement lock")
+    ch:SetAttribute("canRun",true);stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",109);stepDefense(1)
+    check(api.Instinct.Dodging,"new cue did not start a walking fallback")
+    local manual={UserInputType=Enum.UserInputType.Keyboard,KeyCode=Enum.KeyCode.W}
+    input.InputBegan:Fire(manual,false);local userMove=Vector3.new(0.3,0,0.7);hum.LastMove=userMove;stepDefense(1)
+    check(not api.Instinct.Dodging and hum.LastMove==userMove,"defense overrode manual input or zeroed the user's movement")
+    input.InputEnded:Fire(manual);hum.LastMove=Vector3.new();stepDefense(12)
+    place(Vector3.new());enemyChar:SetAttribute("lastSwing",110);stepDefense(1);wall=true;stepDefense(2)
+    check(not api.Instinct.Dodging and hum.LastMove.Magnitude==0,"new obstruction did not stop active steering")
+    wall=false;stepDefense(12);place(Vector3.new());enemyChar:SetAttribute("lastSwing",111);stepDefense(1);focusedBox={};stepDefense(1)
+    check(not api.Instinct.Dodging,"typing did not cancel active steering");focusedBox=nil
+    stepDefense(12);place(Vector3.new());ground=false;reactions=api.Instinct.Reactions;enemyChar:SetAttribute("lastSwing",112);stepDefense(1)
+    check(api.Instinct.Reactions==reactions and api.Instinct.LastBlock:find("ground",1,true),"fallback moved without verified ground")
+    ground=true;destinationBlocked=true;stepDefense(2)
+    check(api.Instinct.Reactions==reactions,"fallback ended inside a solid destination")
+    destinationBlocked=false;stepDefense(12);place(Vector3.new())
+    local effects=node("Folder","Projectiles",workspace)
+    local hit=node("Part","AbilityHitbox",effects);hit.Position=Vector3.new();hit.Size=Vector3.new(4,4,4);hit.CFrame=CFrame.new(hit.Position);hit.CanCollide=false;hit:SetAttribute("IsAttack",true);hit:SetAttribute("OwnerUserId",other.UserId)
+    queryParts={hit};api.SetOption("UltraInstinct",false);api.SetOption("UltraInstinct",true);stepDefense(1)
+    local goal=api.Instinct.LastDestination
+    check(goal and (math.abs(goal.X)>3.7 or math.abs(goal.Z)>3.2),"geometry did not plan an exit from the expanded attack volume")
+    check(api.Instinct.LastMode:find("Walking sidestep",1,true),"known volume restored defensive teleporting")
+    api.SetOption("UltraInstinct",false);hit:Destroy();queryParts={};effects:Destroy();stepDefense(12)
+    -- A test walks normally with Ultra Instinct off; recording alone cannot trigger automatic movement.
+    place(Vector3.new());local tests=api.Instinct.TestMoves;local auto=api.Instinct.AutomaticMoves
+    findName(api.Gui,"TestDodge").Activated:Fire();stepDefense(8)
+    check(api.Instinct.TestMoves==tests+1 and root.Position.Magnitude>0 and root.Position.Magnitude<=4.5,"manual test failed to walk normally with defense off")
+    check(not api.Instinct.Dodging and hum.LastMove.Magnitude==0 and api.Instinct.AutomaticMoves==auto,"manual test changed automatic counts or left movement held")
+    api.Instinct.RecordEncounter();stepDefense(1);enemyChar:SetAttribute("state","casting");enemyChar:SetAttribute("state","neutral")
     enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator").AnimationPlayed:Fire(action);stepDefense(1)
-    check(api.Instinct.AutomaticMoves==auto,"unconfirmed Action4 without cast lock or combat lock triggered a dodge")
-    api.SetOption("UltraInstinct",false);stepDefense(8);place(Vector3.new());auto=api.Instinct.AutomaticMoves;tests=api.Instinct.TestMoves
-    api.Instinct.RecordEncounter();api.Instinct.TestDodge()
-    check(api.Instinct.AutomaticMoves==auto and api.Instinct.TestMoves==tests+1,"manual test inflated the automatic-dodge counter")
-    check(api.Instinct.Diagnostics():find("automatic=0, tests=1",1,true),"encounter deltas failed to separate manual tests and automatic requests")
-    stepDefense(101);action:Destroy();unnamed:Destroy();enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("castLocked",nil)
+    local report=api.Instinct.Diagnostics()
+    check(report:find("83127346512820",1,true) and report:find("state=casting",1,true),"encounter recorder omitted observed animation or transient state")
+    check(api.Instinct.AutomaticMoves==auto,"recording-only mode made an automatic move")
+    stepDefense(202);check(not api.Instinct.Recording,"encounter recording never stopped")
+    check(api.Instinct.Diagnostics():find("automatic=0, tests=0",1,true),"encounter counters mix manual and automatic movements")
+    animation:Destroy();action:Destroy();hud2:Destroy();api.SetOption("UltraInstinct",false);ch:SetAttribute("canRun",nil)
     -- Auto Farm leaves ControlModule enabled and yields to keyboard/joystick input.
     local disabled=0;local moveVector=Vector3.new()
     local controls={controlsEnabled=true,Disable=function() disabled+=1 end,Enable=function() end,GetMoveVector=function() return moveVector end}

@@ -56,7 +56,7 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.3",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 5.4",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
@@ -133,13 +133,13 @@ return function(ctx)
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
-    local defense=section(M.combat,"ULTRA INSTINCT","Reacts to nearby attack states and cast-lock hints with a bounded dodge estimate. Exposed attack bounds use local geometry. Client effects do not reveal hidden damage hitboxes. Normal controls remain enabled.")
+    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready; otherwise briefly sidesteps at your current walking speed. Respects dash cooldowns and yields to your movement. Attack cues and visible bounds cannot guarantee avoidance.")
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
     slider(defense,"InstinctRange","Nearby attack range",6,24)
-    slider(defense,"InstinctMaxDistance","Maximum dodge",4,12)
+    slider(defense,"InstinctMaxDistance","Sidestep limit",4,12)
     local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,48));instinct.TextWrapped=true
-    button(defense,"TestDodge","Test dodge · 4 studs",function()
-        local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Test requested · see dodge report" or (reason or "Test blocked")
+    button(defense,"TestDodge","Test normal sidestep",function()
+        local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Normal sidestep requested · see report" or (reason or "Test blocked")
     end)
     button(defense,"RecordDodge","Record nearby attacks · 10 sec",function()
         API.Instinct.RecordEncounter();footer.Text="Recording nearby attacks for 10 seconds"

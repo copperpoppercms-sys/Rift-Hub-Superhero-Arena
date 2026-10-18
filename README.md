@@ -1,4 +1,4 @@
-# Rift Hub · Superhero Arena · v5.3
+# Rift Hub · Superhero Arena · v5.4
 
 Full animated standalone UI for [Superhero Arena by The Duelists](https://www.roblox.com/games/78710221869926/Superhero-Arena). Place `78710221869926`, universe `10765491459`.
 
@@ -10,26 +10,24 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/copperpoppercms-sys/R
 
 **Auto Farm** contains the existing auto-play behavior: opponent selection, native movement and dash requests, ability selection, timing, combos and camera aiming. It starts off; PLAY starts it and STOP releases its controls.
 
-**Ultra Instinct** is independent of Auto Farm and starts off. It requests one bounded local escape from detected client-visible attack volumes, or a short estimated sidestep when only an attack cue is available. Maximum displacement is adjustable from 4–12 studs (10 by default), and nearby cue range from 6–24 studs. It checks ground, path and destination clearance. It stays in place if no clear local exit fits the cap. Visible effects are not necessarily the game's damage hitboxes, and a property write does not prove the server accepted a dodge.
+**Ultra Instinct** is independent of Auto Farm and starts off. It requests the game's normal dash input when its detected control is available. While dash is cooling down, unavailable or blocked by game state, it briefly sidesteps using ordinary `Humanoid:Move` input at the character's existing WalkSpeed. Defensive movement writes no character position, CFrame, velocity, WalkSpeed, anchor or humanoid-state properties. There is no cooldown bypass.
 
-v5.3 responds to the live report's missing signals: a rising `castLocked` flag is an estimated ability cue, `state=skill` counts as ability use, and an unknown high-priority Action animation can combine with `castLocked` even when `busy=false` and `canAttack=true`. Attribute listeners observe cast-lock transitions. Sustained flags alone do not request repeated moves. Nearby range now applies consistently to both melee and ability cues; the hidden fixed 10-stud melee cutoff is removed. Related source changes are coalesced briefly to avoid multiple reactions to one attack.
+Native dash requests share conservative cooldown/retry timing with Auto Farm and consult exposed HUD cooldown attributes (`OnCooldown`, `Ready`, `CooldownRemaining`, `CooldownDuration`). If no duration is exposed, request timing defaults to 2.5 seconds. Hidden server cooldowns cannot be established from these client fields. Sending an input does not prove a dash was accepted, so normal walking steering remains available briefly after the request too. The game controls native dash distance and behavior.
 
-The report exposed **no recognized attack hitboxes**. `Workspace.ClientFX` entries such as tiny slam-radius parts, rock trails, footsteps and shield echoes remain visual observations; their names and bounds do not establish real damage geometry. The new cast cues provide an estimated dodge, not a proven exit from a server hitbox. Animation IDs are not assigned fictional move names.
+Walking steering lasts at most 0.35 seconds, stops when its nearby destination is reached or passed, checks clearance while active, and releases its input afterward. The **Sidestep limit** caps the walking destination from 4–12 studs; it cannot guarantee a server/native dash distance cap. Normal walking might not reach the planned exit before the attack lands. Zero progress, movement locks, walls or an early warning that arrives too late can still prevent avoidance.
 
-Automatic moves and manual tests now have separate counters in Combat and diagnostics. Encounter reports also show changes in those counters since recording started. Rejected automatic cues report range, elevation, obstruction, expiry or the short movement cooldown, instead of disappearing silently. Attack fields retain independent baselines, and listeners preserve short transitions between heartbeat samples. Failed clearance does not immediately consume a cue.
+Real keyboard/joystick input takes priority and cancels the short defensive steering window. Dragging the hub, typing, losing focus, death/respawn, game movement locks, toggling defense off or unloading also release the owned input. ControlModule stays enabled. Auto Farm yields during the defense window and while the user moves manually.
+
+The detector retains report-backed estimated ability cues (`castLocked`, `state=skill`, an Action animation plus cast lock with `busy=false`), independent swing/cast fields and short attribute transitions. The configured nearby range applies to both melee and ability cues. ClientFX footsteps, rock trails, tiny slam-radius parts and shield echoes do not establish real damage geometry. The report exposed no recognized attack hitboxes; automatic avoidance remains unverified live.
 
 **Diagnosing a missed dodge:**
 
-1. Re-execute v5.3, open Combat, and enable Ultra Instinct.
-2. Tap **Test dodge · 4 studs** once on open ground. This explicitly requests a short move through the same clearance and displacement checks; it does not test automatic attack recognition.
-3. Tap **Record nearby attacks · 10 sec** and encounter a nearby attack. The recorder itself only observes; it can also run with Ultra Instinct off without making automatic moves.
-4. Tap **Copy dodge report** and paste the result. It includes raw nearby character attributes, animation names/IDs/priorities, nearby new-part names/attributes, attack cue sources, automatic/manual counts, cue filter decisions, clearance rejection reasons and a brief observation of the resulting movement. Reports stay in the client/clipboard; there is no upload.
+1. Re-execute v5.4, open Combat, and enable Ultra Instinct. Release the movement stick/keys while testing automation.
+2. **Test normal sidestep** requests a brief normal-speed walk through the same clearance checks; it works with defense off and does not request a dash.
+3. **Record nearby attacks · 10 sec** observes an encounter. The recorder alone does not start automatic movement.
+4. **Copy dodge report** includes automatic/manual counts, native dash request and walking-fallback counts, the latest dash availability reason, cue filtering, clearance failures, observed attributes/animations/effects and local movement observations. These are requests and observations, not proof of a successful dodge. Reports stay in the client/clipboard.
 
-The trace keeps at most 100 recent events. Recording stops after roughly 10 seconds of processed client time. Reports label returned movement as a possible correction or later movement; they cannot identify anti-cheat from a position change alone. General Settings → Copy diagnostics includes the same defense report.
-
-Active-volume classification still uses explicit attack/hitbox metadata, ownership when exposed, and named attack volumes in runtime effects/ability folders. It ignores known own/team attacks, inactive volumes and ordinary character parts. With no exposed volume, nearby attack states, independent swing/cast counters, combo advances and recognizable attack animations can request the estimated fallback. A generic high-priority animation also needs combat-lock evidence; busy alone is insufficient. Unfamiliar animation IDs and parts are recorded without being automatically treated as attacks.
-
-**Normal controls stay enabled.** Ultra Instinct never disables ControlModule, calls Humanoid:Move, anchors the root, changes WalkSpeed, forces humanoid state or holds a dash key. Auto Farm yields to real keyboard/joystick movement. Automatic dodging remains unverified in the live game after the reported failures; the new diagnostics distinguish absent evidence, clearance rejection and movement that was not retained.
+The trace keeps at most 100 events. Recording stops after roughly 10 seconds of processed client time. Position returning near its starting point can be correction or later movement; the report cannot identify anti-cheat by itself.
 
 ## Visuals
 
@@ -47,4 +45,4 @@ Download `docs/SuperheroArena_Editor.html`, open it in a browser, and use Copy a
 
 ## Verification
 
-Set `LUAU_BIN` and `LUAU_COMPILE_BIN` to native Luau executables, then run `python tests/run_checks.py`. The current suite passes 317 simulated checks covering the auto-play core, role sources, confidence labels, ESP toggles, report-derived cast-lock and skill states, melee range beyond 10 studs, automatic/manual counts, cue filter reasons, independent attack sources, short attribute transitions, retry after blocked clearance, recorder-only operation, unknown animation/effect capture, movement observation, bounded geometry escapes, rotated hitboxes, own/inactive/oversized attacks, non-queryable effects, late metadata, manual input, obstructions, ground checks, mobile layout, drag limits, startup failure, re-execution and cleanup. These checks do not establish live Roblox rendering, replicated attack cue availability, hit registration or server acceptance.
+Set `LUAU_BIN` and `LUAU_COMPILE_BIN` to native Luau executables, then run `python tests/run_checks.py`. The current suite passes 353 simulated checks covering the auto-play core, role sources, confidence labels, ESP toggles, native dash availability and request timing, walking fallback during cooldown, bounded steering/release, no defensive position writes, manual override, movement locks, obstacles, ground/destination checks, report-derived cast cues and configured range, independent attack sources, short transitions, geometry destination planning and recorder-only operation, mobile layout, drag limits, startup failure, re-execution and cleanup. These checks do not establish live Roblox rendering, replicated attack cue availability, hit registration or server acceptance.

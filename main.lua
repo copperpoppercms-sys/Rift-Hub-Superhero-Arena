@@ -62,7 +62,7 @@ return function(url)
 end
 end)()("https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/assets/rift_logo.jpg")
 local function normalize(value) return type(value)=="string" and value:lower():gsub("[^%w]","") or "" end
-local API={Game="Superhero Arena",Version="5.3",Enabled=false,Target=nil,Status="Off"}
+local API={Game="Superhero Arena",Version="5.4",Enabled=false,Target=nil,Status="Off"}
 local Config={ESP=true,Chams=true,Names=true,Roles=true,ChamOpacity=0.45,GuessRoles=true,
     UltraInstinct=false,InstinctRange=16,InstinctMaxDistance=10,ReduceMotion=false}
 API.Config=Config
@@ -405,7 +405,7 @@ end
 local function lineOfSight(origin,point,char)
 	local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances={body(LocalPlayer)}; params.IgnoreWater=true
 	local hit=workspace:Raycast(origin,point-origin,params)
-	return not hit or hit.Instance:IsDescendantOf(char)
+	return not hit or char~=nil and hit.Instance:IsDescendantOf(char)
 end
 local function chase(hum,root,targetRoot,clear,dt,desiredGoal)
 	local destination=desiredGoal or targetRoot.Position
@@ -860,6 +860,28 @@ local function nativeDash(hum,root,targetRoot,distance,clear)
 	status(evading and "Dodging" or "Closing distance")
 	return true
 end
+local function defensiveDash(hum,root,direction)
+    if elapsedTime<brain.DashRetry then return false,"Dash request retry delay" end
+    if elapsedTime<brain.NextAt or elapsedTime<brain.StillUntil then return false,"Combat recovery" end
+    local char=body(LocalPlayer)
+    if not char or char:GetAttribute("canDash")==false or char:GetAttribute("busy")==true or char:GetAttribute("canRun")==false then return false,"Dash locked by game state" end
+    local item=find(dashNames)
+    if not item then return false,"Dash control not detected" end
+    local b=item.Button
+    if b and (b:GetAttribute("OnCooldown")==true or b:GetAttribute("Ready")==false or (tonumber(b:GetAttribute("CooldownRemaining")) or 0)>0) then return false,"Dash cooldown active" end
+    local cooldown=numberAttribute(b,"CooldownDuration",2.5,0.4,30)
+    if elapsedTime-brain.DashAt<cooldown-1e-6 then return false,"Dash cooldown active (request timing)" end
+    if not ready(item) then return false,"Dash control unavailable" end
+    -- Check the native dash direction; actual travel distance is controlled by the game.
+    for _,length in ipairs({3,6,9}) do
+        if not safeLocalMove(root,root.Position+direction*length,nil) then return false,"Native dash path obstructed" end
+    end
+    local ok,reason=fire(item);brain.DashRetry=elapsedTime+0.4
+    if not ok then return false,reason or "Dash input rejected" end
+    brain.DashAt=elapsedTime;brain.NextAt=elapsedTime+numberAttribute(b,"RecoveryTime",0.3,0.1,2)
+    brain.StillUntil=brain.NextAt
+    return true,"Native dash input requested (acceptance unverified)"
+end
 local function trackMovement(hum,root,distance,dt)
 	local progress=brain.LastPosition and (root.Position-brain.LastPosition).Magnitude or 1
 	local goal=walkGoal
@@ -1200,15 +1222,16 @@ return function(ctx)
 end
 end)()
 local MakeInstinct=(function()
--- One-shot, local escapes. Never disables controls, holds movement, or forces humanoid state.
+-- Short native-movement defense. No teleport, custom velocity, speed changes or cooldown bypass.
 return function(ctx)
     local Players=game:GetService("Players")
-    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
+    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
     local records,tracked,pending={},{ },{}
     local clock,age,retry,holdUntil=0,0,0,0
     local enabled,dead=false,false
     local addedConnection
     local trace,recordUntil,probe={},0,nil
+    local motion
     local blocks={}
     local function log(message)
         if #trace>=100 then table.remove(trace,1) end
@@ -1245,6 +1268,7 @@ return function(ctx)
             "Attack cues: "..M.Cues.." | animations seen: "..M.Animations.." | hitboxes tracked: "..M.TrackedHitboxes,
             "Clearance attempts: "..M.Attempts.." | move requests: "..M.Reactions.." (automatic="..M.AutomaticMoves..", manual tests="..M.TestMoves..")",
             "Last automatic decision: "..M.LastDecision,
+            "Movement requests: native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
             "Movement observation: "..M.Motion,"Rejected destinations:"}
         local reasons={};for reason,count in pairs(blocks) do table.insert(reasons,reason.." = "..count) end;table.sort(reasons)
@@ -1252,7 +1276,7 @@ return function(ctx)
         if M.EncounterStart then
             table.insert(lines,"Since encounter recording started: automatic="..(M.AutomaticMoves-M.EncounterStart.Auto)..", tests="..(M.TestMoves-M.EncounterStart.Tests)..", cues="..(M.Cues-M.EncounterStart.Cues))
         end
-        table.insert(lines,"Enabled: "..tostring(ctx.Config.UltraInstinct).." | cue range="..ctx.Config.InstinctRange.." | max displacement="..ctx.Config.InstinctMaxDistance)
+        table.insert(lines,"Enabled: "..tostring(ctx.Config.UltraInstinct).." | cue range="..ctx.Config.InstinctRange.." | walking destination cap="..ctx.Config.InstinctMaxDistance)
         local canRun,pause=ctx.CanRun();table.insert(lines,"Can run: "..tostring(canRun).." | "..tostring(pause))
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         table.insert(lines,"Local body: "..(char and char:GetFullName() or "missing").." | anchored="..tostring(root and root.Anchored).." | PlatformStand="..tostring(hum and hum.PlatformStand))
@@ -1289,9 +1313,25 @@ return function(ctx)
         M.LastDecision=reason
         if record.Decision~=reason then record.Decision=reason;log("Automatic @"..record.Player.Name..": "..reason) end
     end
-    function M.Stop() M.Dodging=false;holdUntil=0 end
-    -- Kept as a no-op for the render callback; default Roblox controls stay in charge.
-    function M.Steer() end
+    function M.Stop()
+        local old=motion;motion=nil;M.Dodging=false;holdUntil=0
+        if old and old.Hum.Parent and not ctx.ManualMovement() then pcall(function() old.Hum:Move(Vector3.new(),false) end) end
+    end
+    function M.Steer()
+        if not motion or not M.Dodging then return end
+        if not ctx.CanRun() or ctx.ManualMovement() then M.Stop();M.Status="Paused for your movement or input";return end
+        local char,hum,root=ctx.Body(Players.LocalPlayer)
+        if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute("canRun")==false then M.Stop();return end
+        local delta=Vector3.new(motion.Goal.X-root.Position.X,0,motion.Goal.Z-root.Position.Z)
+        local travelled=(root.Position-motion.Start).Magnitude
+        if clock>=holdUntil or delta.Magnitude<0.4 or travelled>=motion.Limit or delta:Dot(motion.Direction)<=0 then M.Stop();return end
+        if clock>=motion.CheckAt then
+            motion.CheckAt=clock+0.05
+            local checkGoal=root.Position+delta.Unit*math.min(delta.Magnitude,1.5)
+            if not safe(root,checkGoal,nil,motion.Boxes) then M.Stop();M.Status="Sidestep stopped: obstruction";return end
+        end
+        hum:Move(delta.Unit,false)
+    end
     local function remove(plr)
         local record=records[plr]
         if record then
@@ -1444,7 +1484,7 @@ return function(ctx)
     end
     local function eligible(char,hum,root)
         return root and not root.Anchored and not hum.PlatformStand and char:GetAttribute("inArena")~=false
-            and char:GetAttribute("MorphAppearanceReady")~=false and char:GetAttribute("cutsceneLock")~=true
+            and char:GetAttribute("MorphAppearanceReady")~=false and char:GetAttribute("cutsceneLock")~=true and char:GetAttribute("canRun")~=false
     end
     local function geometry(part,root)
         local ok,value=pcall(function()
@@ -1492,30 +1532,49 @@ return function(ctx)
         end
         M.TrackedHitboxes=count;return boxes,overlapping
     end
-    local function execute(root,goal,mode,reason,manual)
-        local offset=goal-root.Position;local distance=offset.Magnitude
+    local function execute(root,goal,mode,reason,manual,boxes)
+        local offset=Vector3.new(goal.X-root.Position.X,0,goal.Z-root.Position.Z);local distance=offset.Magnitude
         if distance<0.2 or distance>ctx.Config.InstinctMaxDistance+0.001 then return false end
-        -- Observe the result later instead of equating a successful property write with an accepted dodge.
-        probe={Root=root,Start=root.Position,Goal=goal,At=clock,Direction=offset.Unit,Distance=distance}
-        M.Motion="Move requested; waiting for position observation"
-        log("Move request "..mode.." distance="..string.format("%.2f",distance))
-        -- Single local move. Preserve velocity, rotation direction, movement controls and humanoid state.
-        root.CFrame=CFrame.lookAt(goal,goal+root.CFrame.LookVector)
+        local char,hum,current=ctx.Body(Players.LocalPlayer)
+        if current~=root or not eligible(char,hum,root) or ctx.ManualMovement() then M.LastBlock="Movement unavailable or manual input active";return false end
+        local speed=tonumber(hum.WalkSpeed) or 0
+        if speed<=0 then M.LastBlock="Normal walking speed is zero";return false end
+        M.Stop()
+        local direction=offset.Unit
+        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05}
+        M.Dodging=true
+        -- Set a normal walking direction before requesting the game's dash input.
+        hum:Move(direction,false)
+        local native,dashReason=false,"Manual test: walking only"
+        if not manual then native,dashReason=ctx.NativeDash(hum,root,direction) end
+        M.LastDash=dashReason or (native and "Dash input requested" or "Dash unavailable")
+        if native then
+            M.NativeDashes+=1;mode="Native dash requested"
+            -- Keep a brief normal walking input too: requesting input does not prove the game accepted a dash.
+            holdUntil=clock+math.min(distance/speed,0.35)
+        else
+            if not manual then M.Sidesteps+=1 end
+            mode=manual and "Test sidestep (normal speed)" or "Walking sidestep · "..M.LastDash
+            holdUntil=clock+math.min(distance/speed,0.35)
+        end
+        probe={Root=root,Start=root.Position,Goal=goal,At=clock,Direction=direction,Distance=math.min(distance,speed*0.12)}
+        M.Motion="Movement input requested; waiting for position observation"
+        log("Move request "..mode.." planned distance="..string.format("%.2f",distance))
         M.Reactions+=1
-        if manual then M.TestMoves+=1 else M.AutomaticMoves+=1;M.LastCue=reason;M.LastDecision="Automatic move requested: "..reason end
+        if manual then M.TestMoves+=1 else M.AutomaticMoves+=1;M.LastCue=reason;M.LastDecision="Automatic movement requested: "..reason end
         M.LastBlock="None";M.LastDistance=distance;M.LastDestination=goal;M.LastMode=mode
-        M.Dodging=true;holdUntil=clock+0.08;retry=clock+0.18;M.Status=mode
+        retry=clock+0.45;M.Status=mode
         return true
     end
     function M.TestDodge()
-        if dead or not ctx.CanRun() then return false,"Paused: close typing/dragging first" end
+        if dead or not ctx.CanRun() or ctx.ManualMovement() then return false,"Paused: release movement, typing or dragging first" end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if not eligible(char,hum,root) then M.LastBlock="Character cannot move";return false,M.LastBlock end
         local boxes=nearby(root)
         for i=0,7 do
             local angle=i*math.pi/4;local goal=root.Position+Vector3.new(math.cos(angle),0,math.sin(angle))*math.min(4,ctx.Config.InstinctMaxDistance)
             local outside=true;for _,box in ipairs(boxes) do if inside(box,goal) then outside=false;break end end
-            if outside and safe(root,goal,nil,boxes) then return execute(root,goal,"Manual test (not attack detection)","Test dodge button",true) end
+            if outside and safe(root,goal,nil,boxes) then return execute(root,goal,"Manual test (not attack detection)","Test dodge button",true,boxes) end
         end
         M.Status="Test blocked: "..M.LastBlock;log(M.Status);return false,M.LastBlock
     end
@@ -1527,7 +1586,7 @@ return function(ctx)
         local progress=(probe.Root.Position-probe.Start):Dot(probe.Direction)
         if not probe.Checked and elapsed>=0.12 then
             probe.Checked=true;probe.Moved=progress>probe.Distance*0.35
-            M.Motion=probe.Moved and "Local displacement observed; server acceptance unverified" or "Move not retained (blocked or corrected locally/server)"
+            M.Motion=probe.Moved and "Local displacement observed; server acceptance unverified" or "No walking progress observed (blocked, movement lock or correction)"
             log(M.Motion.." progress="..string.format("%.2f",progress))
         end
         if elapsed>=0.65 then
@@ -1542,6 +1601,7 @@ return function(ctx)
         clock+=dt;age+=dt;observeMove()
         if M.Recording and clock>=recordUntil then M.Recording=false;log("Encounter recording complete; copy dodge report") end
         if not observing() then
+            if motion then M.Steer();if motion then return end end
             if enabled then clear() end;enabled=false;M.Stop();retry=0;age=0;M.Status="Off";return
         end
         if not enabled then
@@ -1554,8 +1614,10 @@ return function(ctx)
         if M.Dodging and clock>=holdUntil then M.Stop() end
         local canRun,pause=ctx.CanRun()
         if not canRun then M.Stop();M.Status="Paused: "..(pause or "input or camera");return end
+        if ctx.ManualMovement() then M.Stop();M.Status="Paused for your movement";return end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        if not eligible(char,hum,root) then M.Stop();M.Status="Waiting for character";return end
+        if not eligible(char,hum,root) then M.Stop();M.Status="Waiting for movable character";return end
+        if motion then M.Steer();if motion then return end end
         if age<0.025 then return end;age=0
         -- Parenting can precede names/attributes; give new parts a short metadata window.
         for part,at in pairs(pending) do
@@ -1588,7 +1650,7 @@ return function(ctx)
                     if outside and safe(root,goal,nil,boxes) then bestGoal,bestDistance=goal,distance end
                 end
             end
-            if bestGoal and execute(root,bestGoal,"Local hitbox escape","Nearby active attack volume") then
+            if bestGoal and execute(root,bestGoal,"Local hitbox escape","Nearby active attack volume",false,boxes) then
                 for _,box in ipairs(overlapping) do tracked[box.Part].ReactedAt=clock end
                 return
             end
@@ -1636,7 +1698,7 @@ return function(ctx)
                 for _,direction in ipairs(candidates) do
                     local goal=root.Position+direction*length;local outside=true
                     for _,box in ipairs(boxes) do if inside(box,goal) then outside=false;break end end
-                    if outside and safe(root,goal,bestRecord.Character,boxes) and execute(root,goal,"Short dodge · hitbox unknown",reason) then decision(bestRecord,"Automatic dodge requested");bestRecord.Cue=nil;return end
+                    if outside and safe(root,goal,bestRecord.Character,boxes) and execute(root,goal,"Short dodge · hitbox unknown",reason,false,boxes) then decision(bestRecord,"Automatic dodge requested");bestRecord.Cue=nil;return end
                 end
             end
         end
@@ -1708,7 +1770,7 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.3",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 5.4",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
@@ -1785,13 +1847,13 @@ return function(ctx)
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
-    local defense=section(M.combat,"ULTRA INSTINCT","Reacts to nearby attack states and cast-lock hints with a bounded dodge estimate. Exposed attack bounds use local geometry. Client effects do not reveal hidden damage hitboxes. Normal controls remain enabled.")
+    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready; otherwise briefly sidesteps at your current walking speed. Respects dash cooldowns and yields to your movement. Attack cues and visible bounds cannot guarantee avoidance.")
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
     slider(defense,"InstinctRange","Nearby attack range",6,24)
-    slider(defense,"InstinctMaxDistance","Maximum dodge",4,12)
+    slider(defense,"InstinctMaxDistance","Sidestep limit",4,12)
     local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,48));instinct.TextWrapped=true
-    button(defense,"TestDodge","Test dodge · 4 studs",function()
-        local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Test requested · see dodge report" or (reason or "Test blocked")
+    button(defense,"TestDodge","Test normal sidestep",function()
+        local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Normal sidestep requested · see report" or (reason or "Test blocked")
     end)
     button(defense,"RecordDodge","Record nearby attacks · 10 sec",function()
         API.Instinct.RecordEncounter();footer.Text="Recording nearby attacks for 10 seconds"
@@ -1894,7 +1956,7 @@ end
 local started,startError=pcall(function()
     API.Visuals=MakeVisuals({Config=Config,Gui=gui,Body=body})
     API.ResolveHero=API.Visuals.Resolve
-    API.Instinct=MakeInstinct({Config=Config,Body=body,Opposing=opposing,Sight=lineOfSight,
+    API.Instinct=MakeInstinct({Config=Config,Body=body,Opposing=opposing,Sight=lineOfSight,ManualMovement=manualMovement,NativeDash=defensiveDash,
         CanRun=function()
             local camera=workspace.CurrentCamera
             if not alive then return false,"Hub unloaded" end
