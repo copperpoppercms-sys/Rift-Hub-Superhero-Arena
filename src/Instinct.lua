@@ -46,7 +46,8 @@ return function(ctx)
             "Last automatic decision: "..M.LastDecision,
             "Movement requests: native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
-            "Movement observation: "..M.Motion,"Rejected destinations:"}
+            "Movement observation: "..M.Motion,
+            "Manual movement present: "..tostring(ctx.ManualMovement()).." | last assist window="..tostring(M.LastAssistWindow).." seconds (0.18 while moving)","Rejected destinations:"}
         local reasons={};for reason,count in pairs(blocks) do table.insert(reasons,reason.." = "..count) end;table.sort(reasons)
         for _,line in ipairs(reasons) do table.insert(lines,line) end
         if M.EncounterStart then
@@ -91,16 +92,24 @@ return function(ctx)
     end
     function M.Stop()
         local old=motion;motion=nil;M.Dodging=false;holdUntil=0
-        if old and old.Hum.Parent and not ctx.ManualMovement() then pcall(function() old.Hum:Move(Vector3.new(),false) end) end
+        if old and old.Hum.Parent then
+            pcall(function()
+                if ctx.CanRun() and ctx.ManualMovement() then ctx.ResumeMovement(old.Hum) else old.Hum:Move(Vector3.new(),false) end
+            end)
+        end
     end
     function M.Steer()
         if not motion or not M.Dodging then return end
-        if not ctx.CanRun() or ctx.ManualMovement() then M.Stop();M.Status="Paused for your movement or input";return end
+        if not ctx.CanRun() then M.Stop();M.Status="Paused for input or camera";return end
+        if ctx.ManualMovement() and not motion.MovingAssist then
+            motion.MovingAssist=true;holdUntil=math.min(holdUntil,clock+0.18)
+            motion.WallUntil=math.min(motion.WallUntil,os.clock()+0.18)
+        end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute("canRun")==false then M.Stop();return end
         local delta=Vector3.new(motion.Goal.X-root.Position.X,0,motion.Goal.Z-root.Position.Z)
         local travelled=(root.Position-motion.Start).Magnitude
-        if clock>=holdUntil or delta.Magnitude<0.4 or travelled>=motion.Limit or delta:Dot(motion.Direction)<=0 then M.Stop();return end
+        if clock>=holdUntil or os.clock()>=motion.WallUntil or delta.Magnitude<0.4 or travelled>=motion.Limit or delta:Dot(motion.Direction)<=0 then M.Stop();return end
         if clock>=motion.CheckAt then
             motion.CheckAt=clock+0.05
             local checkGoal=root.Position+delta.Unit*math.min(delta.Magnitude,1.5)
@@ -312,12 +321,15 @@ return function(ctx)
         local offset=Vector3.new(goal.X-root.Position.X,0,goal.Z-root.Position.Z);local distance=offset.Magnitude
         if distance<0.2 or distance>ctx.Config.InstinctMaxDistance+0.001 then return false end
         local char,hum,current=ctx.Body(Players.LocalPlayer)
-        if current~=root or not eligible(char,hum,root) or ctx.ManualMovement() then M.LastBlock="Movement unavailable or manual input active";return false end
+        if current~=root or not eligible(char,hum,root) then M.LastBlock="Movement unavailable";return false end
         local speed=tonumber(hum.WalkSpeed) or 0
         if speed<=0 then M.LastBlock="Normal walking speed is zero";return false end
         M.Stop()
         local direction=offset.Unit
-        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05}
+        local moving=ctx.ManualMovement()
+        local window=math.min(distance/speed,moving and 0.18 or 0.35)
+        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,MovingAssist=moving,WallUntil=os.clock()+window}
+        M.LastAssistWindow=window
         M.Dodging=true
         -- Set a normal walking direction before requesting the game's dash input.
         hum:Move(direction,false)
@@ -327,11 +339,11 @@ return function(ctx)
         if native then
             M.NativeDashes+=1;mode="Native dash requested"
             -- Keep a brief normal walking input too: requesting input does not prove the game accepted a dash.
-            holdUntil=clock+math.min(distance/speed,0.35)
+            holdUntil=clock+window
         else
             if not manual then M.Sidesteps+=1 end
             mode=manual and "Test sidestep (normal speed)" or "Walking sidestep · "..M.LastDash
-            holdUntil=clock+math.min(distance/speed,0.35)
+            holdUntil=clock+window
         end
         probe={Root=root,Start=root.Position,Goal=goal,At=clock,Direction=direction,Distance=math.min(distance,speed*0.12)}
         M.Motion="Movement input requested; waiting for position observation"
@@ -343,7 +355,7 @@ return function(ctx)
         return true
     end
     function M.TestDodge()
-        if dead or not ctx.CanRun() or ctx.ManualMovement() then return false,"Paused: release movement, typing or dragging first" end
+        if dead or not ctx.CanRun() then return false,"Paused: close typing or dragging first" end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if not eligible(char,hum,root) then M.LastBlock="Character cannot move";return false,M.LastBlock end
         local boxes=nearby(root)
@@ -390,7 +402,6 @@ return function(ctx)
         if M.Dodging and clock>=holdUntil then M.Stop() end
         local canRun,pause=ctx.CanRun()
         if not canRun then M.Stop();M.Status="Paused: "..(pause or "input or camera");return end
-        if ctx.ManualMovement() then M.Stop();M.Status="Paused for your movement";return end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if not eligible(char,hum,root) then M.Stop();M.Status="Waiting for movable character";return end
         if motion then M.Steer();if motion then return end end

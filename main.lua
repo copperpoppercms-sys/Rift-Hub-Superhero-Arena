@@ -62,7 +62,7 @@ return function(url)
 end
 end)()("https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/assets/rift_logo.jpg")
 local function normalize(value) return type(value)=="string" and value:lower():gsub("[^%w]","") or "" end
-local API={Game="Superhero Arena",Version="5.4",Enabled=false,Target=nil,Status="Off"}
+local API={Game="Superhero Arena",Version="5.5",Enabled=false,Target=nil,Status="Off"}
 local Config={ESP=true,Chams=true,Names=true,Roles=true,ChamOpacity=0.45,GuessRoles=true,
     UltraInstinct=false,InstinctRange=16,InstinctMaxDistance=10,ReduceMotion=false}
 API.Config=Config
@@ -130,6 +130,20 @@ local function manualMovement()
     local moving=false
     if readControls then pcall(function() moving=readControls:GetMoveVector().Magnitude>0.05 end) end
     return moving
+end
+local function resumeUserMovement(hum)
+    -- Roblox GetMoveVector is camera-relative. Restore the live input, never a saved direction.
+    if readControls then
+        local ok,vector=pcall(function() return readControls:GetMoveVector() end)
+        if ok and vector then hum:Move(vector,true);return end
+    end
+    local function heldKey(a,b) return manualKeys[a] or manualKeys[b] end
+    local x=(heldKey(Enum.KeyCode.D,Enum.KeyCode.Right) and 1 or 0)-(heldKey(Enum.KeyCode.A,Enum.KeyCode.Left) and 1 or 0)
+    local z=(heldKey(Enum.KeyCode.S,Enum.KeyCode.Down) and 1 or 0)-(heldKey(Enum.KeyCode.W,Enum.KeyCode.Up) and 1 or 0)
+    local vector=Vector3.new(x,0,z)
+    if vector.Magnitude>1 then vector=vector.Unit end
+    if vector.Magnitude>0 then hum:Move(vector,true) end
+    -- If touch controls cannot be read, their next normal frame resumes them; ControlModule stays enabled.
 end
 local clearCombo,combatBrain,groupTarget
 local targetPolicy={HoldUntil=0,ReviewAt=0,GroupSince=nil,Previous=nil,PreviousUntil=0,LastSwitch=0}
@@ -1270,7 +1284,8 @@ return function(ctx)
             "Last automatic decision: "..M.LastDecision,
             "Movement requests: native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
-            "Movement observation: "..M.Motion,"Rejected destinations:"}
+            "Movement observation: "..M.Motion,
+            "Manual movement present: "..tostring(ctx.ManualMovement()).." | last assist window="..tostring(M.LastAssistWindow).." seconds (0.18 while moving)","Rejected destinations:"}
         local reasons={};for reason,count in pairs(blocks) do table.insert(reasons,reason.." = "..count) end;table.sort(reasons)
         for _,line in ipairs(reasons) do table.insert(lines,line) end
         if M.EncounterStart then
@@ -1315,16 +1330,24 @@ return function(ctx)
     end
     function M.Stop()
         local old=motion;motion=nil;M.Dodging=false;holdUntil=0
-        if old and old.Hum.Parent and not ctx.ManualMovement() then pcall(function() old.Hum:Move(Vector3.new(),false) end) end
+        if old and old.Hum.Parent then
+            pcall(function()
+                if ctx.CanRun() and ctx.ManualMovement() then ctx.ResumeMovement(old.Hum) else old.Hum:Move(Vector3.new(),false) end
+            end)
+        end
     end
     function M.Steer()
         if not motion or not M.Dodging then return end
-        if not ctx.CanRun() or ctx.ManualMovement() then M.Stop();M.Status="Paused for your movement or input";return end
+        if not ctx.CanRun() then M.Stop();M.Status="Paused for input or camera";return end
+        if ctx.ManualMovement() and not motion.MovingAssist then
+            motion.MovingAssist=true;holdUntil=math.min(holdUntil,clock+0.18)
+            motion.WallUntil=math.min(motion.WallUntil,os.clock()+0.18)
+        end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute("canRun")==false then M.Stop();return end
         local delta=Vector3.new(motion.Goal.X-root.Position.X,0,motion.Goal.Z-root.Position.Z)
         local travelled=(root.Position-motion.Start).Magnitude
-        if clock>=holdUntil or delta.Magnitude<0.4 or travelled>=motion.Limit or delta:Dot(motion.Direction)<=0 then M.Stop();return end
+        if clock>=holdUntil or os.clock()>=motion.WallUntil or delta.Magnitude<0.4 or travelled>=motion.Limit or delta:Dot(motion.Direction)<=0 then M.Stop();return end
         if clock>=motion.CheckAt then
             motion.CheckAt=clock+0.05
             local checkGoal=root.Position+delta.Unit*math.min(delta.Magnitude,1.5)
@@ -1536,12 +1559,15 @@ return function(ctx)
         local offset=Vector3.new(goal.X-root.Position.X,0,goal.Z-root.Position.Z);local distance=offset.Magnitude
         if distance<0.2 or distance>ctx.Config.InstinctMaxDistance+0.001 then return false end
         local char,hum,current=ctx.Body(Players.LocalPlayer)
-        if current~=root or not eligible(char,hum,root) or ctx.ManualMovement() then M.LastBlock="Movement unavailable or manual input active";return false end
+        if current~=root or not eligible(char,hum,root) then M.LastBlock="Movement unavailable";return false end
         local speed=tonumber(hum.WalkSpeed) or 0
         if speed<=0 then M.LastBlock="Normal walking speed is zero";return false end
         M.Stop()
         local direction=offset.Unit
-        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05}
+        local moving=ctx.ManualMovement()
+        local window=math.min(distance/speed,moving and 0.18 or 0.35)
+        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,MovingAssist=moving,WallUntil=os.clock()+window}
+        M.LastAssistWindow=window
         M.Dodging=true
         -- Set a normal walking direction before requesting the game's dash input.
         hum:Move(direction,false)
@@ -1551,11 +1577,11 @@ return function(ctx)
         if native then
             M.NativeDashes+=1;mode="Native dash requested"
             -- Keep a brief normal walking input too: requesting input does not prove the game accepted a dash.
-            holdUntil=clock+math.min(distance/speed,0.35)
+            holdUntil=clock+window
         else
             if not manual then M.Sidesteps+=1 end
             mode=manual and "Test sidestep (normal speed)" or "Walking sidestep · "..M.LastDash
-            holdUntil=clock+math.min(distance/speed,0.35)
+            holdUntil=clock+window
         end
         probe={Root=root,Start=root.Position,Goal=goal,At=clock,Direction=direction,Distance=math.min(distance,speed*0.12)}
         M.Motion="Movement input requested; waiting for position observation"
@@ -1567,7 +1593,7 @@ return function(ctx)
         return true
     end
     function M.TestDodge()
-        if dead or not ctx.CanRun() or ctx.ManualMovement() then return false,"Paused: release movement, typing or dragging first" end
+        if dead or not ctx.CanRun() then return false,"Paused: close typing or dragging first" end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if not eligible(char,hum,root) then M.LastBlock="Character cannot move";return false,M.LastBlock end
         local boxes=nearby(root)
@@ -1614,7 +1640,6 @@ return function(ctx)
         if M.Dodging and clock>=holdUntil then M.Stop() end
         local canRun,pause=ctx.CanRun()
         if not canRun then M.Stop();M.Status="Paused: "..(pause or "input or camera");return end
-        if ctx.ManualMovement() then M.Stop();M.Status="Paused for your movement";return end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if not eligible(char,hum,root) then M.Stop();M.Status="Waiting for movable character";return end
         if motion then M.Steer();if motion then return end end
@@ -1770,7 +1795,7 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.4",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 5.5",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
@@ -1847,7 +1872,7 @@ return function(ctx)
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
-    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready; otherwise briefly sidesteps at your current walking speed. Respects dash cooldowns and yields to your movement. Attack cues and visible bounds cannot guarantee avoidance.")
+    local defense=section(M.combat,"ULTRA INSTINCT","Requests the normal dash when ready; otherwise briefly sidesteps at your current walking speed. Respects dash cooldowns. While you run, assists steering for at most 0.18 sec, then returns to your current input. Attack cues and visible bounds cannot guarantee avoidance.")
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
     slider(defense,"InstinctRange","Nearby attack range",6,24)
     slider(defense,"InstinctMaxDistance","Sidestep limit",4,12)
@@ -1956,7 +1981,7 @@ end
 local started,startError=pcall(function()
     API.Visuals=MakeVisuals({Config=Config,Gui=gui,Body=body})
     API.ResolveHero=API.Visuals.Resolve
-    API.Instinct=MakeInstinct({Config=Config,Body=body,Opposing=opposing,Sight=lineOfSight,ManualMovement=manualMovement,NativeDash=defensiveDash,
+    API.Instinct=MakeInstinct({Config=Config,Body=body,Opposing=opposing,Sight=lineOfSight,ManualMovement=manualMovement,ResumeMovement=resumeUserMovement,NativeDash=defensiveDash,
         CanRun=function()
             local camera=workspace.CurrentCamera
             if not alive then return false,"Hub unloaded" end
