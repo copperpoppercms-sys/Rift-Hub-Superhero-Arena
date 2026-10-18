@@ -13,6 +13,48 @@ local function connect(signal,fn) local c=signal:Connect(fn); table.insert(conne
 local function create(class,props,parent)
 	local node=Instance.new(class); for key,value in pairs(props) do node[key]=value end; node.Parent=parent; return node
 end
+local Brand=(function()
+-- Exact user-supplied Rift logo. ImageRect selects the R emblem for compact controls.
+-- One asynchronous download per script; failed image loading leaves the text fallback usable.
+return function(url)
+	local M={}
+	local asset,started=nil,false
+	local targets=setmetatable({},{__mode="k"})
+	local function paint(image,fallback)
+		if not image.Parent or not asset then return end
+		image.Image=asset; image.Visible=true
+		if fallback and fallback.Parent then fallback.Text="" end
+	end
+	function M.Apply(image,fallback)
+		image.Name="RiftLogo"; image.ImageRectOffset=Vector2.new(380,295); image.ImageRectSize=Vector2.new(510,525)
+		image.ImageColor3=Color3.new(1,1,1); image.ScaleType=Enum.ScaleType.Fit; image.Visible=false
+		targets[image]=fallback or false
+		if asset then paint(image,fallback); return end
+		if started then return end; started=true
+		task.spawn(function()
+			local ok,result=pcall(function()
+				local customAsset=type(getcustomasset)=="function" and getcustomasset or type(getsynasset)=="function" and getsynasset
+				assert(customAsset and type(writefile)=="function" and type(isfile)=="function","Custom images unavailable")
+				local path="RiftHub/rift-logo-92145dc6000c.jpg"
+				if type(isfolder)=="function" and type(makefolder)=="function" and not isfolder("RiftHub") then makefolder("RiftHub") end
+				if not isfile(path) then
+					local bytes=game:HttpGet(url)
+					assert(type(bytes)=="string" and bytes:sub(1,3)==string.char(255,216,255),"Invalid Rift logo")
+					writefile(path,bytes)
+				end
+				local content=customAsset(path)
+				assert(type(content)=="string" and content~="","Image registration failed")
+				return content
+			end)
+			if not ok then return end
+			asset=result
+			for image,fallback in pairs(targets) do paint(image,fallback) end
+			table.clear(targets)
+		end)
+	end
+	return M
+end
+end)()("https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/assets/rift_logo.jpg")
 local function normalize(value) return type(value)=="string" and value:lower():gsub("[^%w]","") or "" end
 local API={Game="Superhero Arena",Version="4.6",Enabled=false,Target=nil,Status="Off"}
 local gui=create("ScreenGui",{Name="RiftAutoPlay",ResetOnSpawn=false,IgnoreGuiInset=true,DisplayOrder=900},nil)
@@ -977,7 +1019,10 @@ end
 local panel=create("Frame",{Name="Panel",AnchorPoint=Vector2.new(0.5,0),Position=UDim2.new(0.5,0,0,34),Size=UDim2.fromOffset(266,128),BackgroundColor3=Color3.fromRGB(22,24,28),BorderSizePixel=0},gui)
 create("UICorner",{CornerRadius=UDim.new(0,12)},panel)
 create("UIStroke",{Color=Color3.fromRGB(54,57,63),Thickness=1},panel)
-local title=create("TextLabel",{Name="Handle",Active=true,Position=UDim2.fromOffset(14,8),Size=UDim2.new(1,-60,0,26),BackgroundTransparency=1,Text="RIFT · AUTO PLAY",Font=Enum.Font.GothamBold,TextSize=12,TextColor3=Color3.fromRGB(235,232,224),TextXAlignment=Enum.TextXAlignment.Left},panel)
+local title=create("TextLabel",{Name="Handle",Active=true,Position=UDim2.fromOffset(48,8),Size=UDim2.new(1,-94,0,26),BackgroundTransparency=1,Text="RIFT · AUTO PLAY",Font=Enum.Font.GothamBold,TextSize=12,TextColor3=Color3.fromRGB(235,232,224),TextXAlignment=Enum.TextXAlignment.Left},panel)
+local logoFallback=create("TextLabel",{Position=UDim2.fromOffset(14,8),Size=UDim2.fromOffset(26,26),Text="R",Font=Enum.Font.GothamBold,TextSize=22,TextColor3=Color3.new(1,1,1),BackgroundTransparency=1},panel)
+local logoImage=create("ImageLabel",{Position=UDim2.fromOffset(14,8),Size=UDim2.fromOffset(26,26),BackgroundTransparency=1},panel)
+Brand.Apply(logoImage,logoFallback)
 local close=create("TextButton",{Position=UDim2.new(1,-38,0,8),Size=UDim2.fromOffset(26,26),Text="×",Font=Enum.Font.Gotham,TextSize=19,TextColor3=Color3.fromRGB(172,174,183),BackgroundTransparency=1,AutoButtonColor=false},panel)
 playButton=create("TextButton",{Name="Play",Position=UDim2.fromOffset(14,42),Size=UDim2.new(1,-28,0,40),Text="PLAY",Font=Enum.Font.GothamBold,TextSize=14,TextColor3=Color3.fromRGB(240,240,230),BackgroundColor3=Color3.fromRGB(72,91,68),BorderSizePixel=0,AutoButtonColor=false},panel)
 create("UICorner",{CornerRadius=UDim.new(0,8)},playButton)

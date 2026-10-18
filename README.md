@@ -17,3 +17,7 @@ Download `docs/SuperheroArena_Editor.html` and open it in a browser to edit or c
 ## Validation
 
 Set `LUAU_BIN` and `LUAU_COMPILE_BIN` to native Luau executables and run `python tests/run_checks.py`. Tests simulate Roblox; live controls, hit registration and movement need in-game checking.
+
+## Rift branding
+
+The header uses the user-supplied Rift Hub R emblem from `assets/rift_logo.jpg`. Existing minimized controls use the same emblem. The original JPEG is preserved unchanged; logo cache names include its content hash. If custom images are unavailable, text branding remains usable.
