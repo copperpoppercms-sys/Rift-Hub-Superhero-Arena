@@ -1,7 +1,7 @@
 -- One-shot, local escapes. Never disables controls, holds movement, or forces humanoid state.
 return function(ctx)
     local Players=game:GetService("Players")
-    local M={Status="Off",Dodging=false,Reactions=0,LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
+    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
     local records,tracked,pending={},{ },{}
     local clock,age,retry,holdUntil=0,0,0,0
     local enabled,dead=false,false
@@ -34,17 +34,22 @@ return function(ctx)
         if dead then return false end
         table.clear(trace);table.clear(blocks);recordUntil=clock+10;M.Recording=true
         for _,record in pairs(records) do record.LogValues=nil end
+        M.EncounterStart={Auto=M.AutomaticMoves,Tests=M.TestMoves,Cues=M.Cues}
         log("Encounter recording started (10 seconds; observational only)")
         return true
     end
     function M.Diagnostics()
         local lines={"Ultra Instinct live report", "Status: "..M.Status,"Recording: "..tostring(M.Recording),
             "Attack cues: "..M.Cues.." | animations seen: "..M.Animations.." | hitboxes tracked: "..M.TrackedHitboxes,
-            "Clearance attempts: "..M.Attempts.." | move requests: "..M.Reactions,
+            "Clearance attempts: "..M.Attempts.." | move requests: "..M.Reactions.." (automatic="..M.AutomaticMoves..", manual tests="..M.TestMoves..")",
+            "Last automatic decision: "..M.LastDecision,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
             "Movement observation: "..M.Motion,"Rejected destinations:"}
         local reasons={};for reason,count in pairs(blocks) do table.insert(reasons,reason.." = "..count) end;table.sort(reasons)
         for _,line in ipairs(reasons) do table.insert(lines,line) end
+        if M.EncounterStart then
+            table.insert(lines,"Since encounter recording started: automatic="..(M.AutomaticMoves-M.EncounterStart.Auto)..", tests="..(M.TestMoves-M.EncounterStart.Tests)..", cues="..(M.Cues-M.EncounterStart.Cues))
+        end
         table.insert(lines,"Enabled: "..tostring(ctx.Config.UltraInstinct).." | cue range="..ctx.Config.InstinctRange.." | max displacement="..ctx.Config.InstinctMaxDistance)
         local canRun,pause=ctx.CanRun();table.insert(lines,"Can run: "..tostring(canRun).." | "..tostring(pause))
         local char,hum,root=ctx.Body(Players.LocalPlayer)
@@ -54,7 +59,7 @@ return function(ctx)
             if ctx.Opposing(plr) then
                 local model,_,otherRoot=ctx.Body(plr);local record=records[plr]
                 local distance=root and otherRoot and string.format("%.1f",(root.Position-otherRoot.Position).Magnitude) or "unknown"
-                table.insert(lines,"@"..plr.Name.." distance="..distance.." watched="..tostring(record~=nil).." cue="..tostring(record and record.Cue and record.Cue.Reason).." | "..(model and snapshot(model) or "body missing"))
+                table.insert(lines,"@"..plr.Name.." distance="..distance.." watched="..tostring(record~=nil).." cue="..tostring(record and record.Cue and record.Cue.Reason).." decision="..tostring(record and record.Decision).." | "..(model and snapshot(model) or "body missing"))
                 if #lines>=45 then table.insert(lines,"[nearby player report capped]");break end
             end
         end
@@ -62,13 +67,25 @@ return function(ctx)
         for _,line in ipairs(trace) do table.insert(lines,line) end
         return table.concat(lines,"\n")
     end
-    local states={attack=true,attacking=true,casting=true,charging=true,windup=true,swinging=true,usingability=true}
+    local states={attack=true,attacking=true,casting=true,charging=true,windup=true,swinging=true,usingability=true,skill=true}
     local containers={projectiles=true,abilities=true,effects=true,vfx=true,hitboxes=true,attacks=true,damagezones=true}
     local function norm(s) return type(s)=="string" and s:lower():gsub("[^%w]","") or "" end
     local function finite(n) return type(n)=="number" and n==n and math.abs(n)<math.huge end
     local function cue(record,reason,ability)
-        record.Cue={At=clock,Reason=reason,Ability=ability};M.LastCue=reason;M.Cues+=1
+        -- Different replicated fields can describe the same attack. Keep one pending cue.
+        local previous=record.Cue
+        if previous and clock-previous.At<0.25 then
+            if ability then previous.Ability=true;previous.Reason=reason end
+            return
+        end
+        if not previous and record.LastCueAt and clock-record.LastCueAt<0.2 then return end
+        record.LastCueAt=clock
+        record.Cue={At=clock,Reason=reason,Ability=ability};record.Decision=nil;M.LastCue=reason;M.Cues+=1
         log("Cue @"..record.Player.Name..": "..reason)
+    end
+    local function decision(record,reason)
+        M.LastDecision=reason
+        if record.Decision~=reason then record.Decision=reason;log("Automatic @"..record.Player.Name..": "..reason) end
     end
     function M.Stop() M.Dodging=false;holdUntil=0 end
     -- Kept as a no-op for the render callback; default Roblox controls stay in charge.
@@ -169,6 +186,8 @@ return function(ctx)
             if attacking then cue(record,"Attack animation",not name:find("punch",1,true) and not name:find("swing",1,true))
             elseif track.Priority==Enum.AnimationPriority.Action or track.Priority==Enum.AnimationPriority.Action2 or track.Priority==Enum.AnimationPriority.Action3 or track.Priority==Enum.AnimationPriority.Action4 then
                 record.ActionAt=clock
+                -- Live report: Action4 + castLocked can occur with busy=false/canAttack=true.
+                if char:GetAttribute("castLocked")==true then cue(record,"Action animation + castLocked (estimate)",true);record.ActionAt=nil end
             end
         end
         local animator=hum:FindFirstChildOfClass("Animator")
@@ -180,11 +199,15 @@ return function(ctx)
         local function fields()
             if dead or not observing() then return end
             local stateName=norm(char:GetAttribute("state"))
-            local ability=({casting=true,charging=true,windup=true,usingability=true})[stateName]==true or char:GetAttribute("IsCasting")==true
+            local ability=({casting=true,charging=true,windup=true,usingability=true,skill=true})[stateName]==true or char:GetAttribute("IsCasting")==true
             local state=states[stateName]==true or char:GetAttribute("IsAttacking")==true or char:GetAttribute("IsCasting")==true
             local combo=tonumber(char:GetAttribute("combo"))
+            local castLocked=char:GetAttribute("castLocked")==true
             if record.Initialized then
                 if state and not record.Attacking then cue(record,"Attack state: "..stateName,ability) end
+                if castLocked and not record.CastLocked and stateName~="ragdolled" and stateName~="stunned" then
+                    cue(record,"castLocked started (estimated ability)",true)
+                end
                 -- Each source has its own baseline; lastSwing must never mask m1Resolved.
                 for _,key in ipairs({"lastSwing","m1Resolved","lastAttack","CastStartedAt","AbilityStartedAt","lastCast","LastAbility"}) do
                     local value=char:GetAttribute(key);local previous=record.Values[key]
@@ -196,10 +219,12 @@ return function(ctx)
                 if combo and combo>0 and combo~=record.Combo then cue(record,"Combo advanced",false) end
             elseif state then cue(record,"Active attack",ability) end
             local locked=char:GetAttribute("busy")==true and char:GetAttribute("canAttack")==false
-            if record.ActionAt and clock-record.ActionAt<0.25 and locked then cue(record,"Action animation + combat lock",true);record.ActionAt=nil end
+            if record.ActionAt and clock-record.ActionAt<0.25 and (locked or castLocked) then
+                cue(record,castLocked and "Action animation + castLocked (estimate)" or "Action animation + combat lock",true);record.ActionAt=nil
+            end
             record.Values={}
             for _,key in ipairs({"lastSwing","m1Resolved","lastAttack","CastStartedAt","AbilityStartedAt","lastCast","LastAbility"}) do record.Values[key]=char:GetAttribute(key) end
-            record.Initialized=true;record.Attacking=state;record.Combo=combo
+            record.Initialized=true;record.Attacking=state;record.Combo=combo;record.CastLocked=castLocked
             if M.Recording then
                 local attrs=snapshot(char)
                 if attrs~=record.LogValues then log("Fields @"..plr.Name..": "..attrs);record.LogValues=attrs end
@@ -208,7 +233,7 @@ return function(ctx)
         if not record.Bound then
             record.Bound=true
             -- Event listeners retain short attack transitions that can disappear between heartbeats.
-            for _,key in ipairs({"state","IsAttacking","IsCasting","lastSwing","m1Resolved","lastAttack","CastStartedAt","AbilityStartedAt","lastCast","LastAbility","combo","busy","canAttack"}) do
+            for _,key in ipairs({"state","IsAttacking","IsCasting","lastSwing","m1Resolved","lastAttack","CastStartedAt","AbilityStartedAt","lastCast","LastAbility","combo","busy","canAttack","castLocked"}) do
                 pcall(function() table.insert(record.Attributes,char:GetAttributeChangedSignal(key):Connect(fields)) end)
             end
         end
@@ -265,7 +290,7 @@ return function(ctx)
         end
         M.TrackedHitboxes=count;return boxes,overlapping
     end
-    local function execute(root,goal,mode,reason)
+    local function execute(root,goal,mode,reason,manual)
         local offset=goal-root.Position;local distance=offset.Magnitude
         if distance<0.2 or distance>ctx.Config.InstinctMaxDistance+0.001 then return false end
         -- Observe the result later instead of equating a successful property write with an accepted dodge.
@@ -274,7 +299,9 @@ return function(ctx)
         log("Move request "..mode.." distance="..string.format("%.2f",distance))
         -- Single local move. Preserve velocity, rotation direction, movement controls and humanoid state.
         root.CFrame=CFrame.lookAt(goal,goal+root.CFrame.LookVector)
-        M.Reactions+=1;M.LastDistance=distance;M.LastDestination=goal;M.LastMode=mode;M.LastCue=reason
+        M.Reactions+=1
+        if manual then M.TestMoves+=1 else M.AutomaticMoves+=1;M.LastCue=reason;M.LastDecision="Automatic move requested: "..reason end
+        M.LastBlock="None";M.LastDistance=distance;M.LastDestination=goal;M.LastMode=mode
         M.Dodging=true;holdUntil=clock+0.08;retry=clock+0.18;M.Status=mode
         return true
     end
@@ -286,7 +313,7 @@ return function(ctx)
         for i=0,7 do
             local angle=i*math.pi/4;local goal=root.Position+Vector3.new(math.cos(angle),0,math.sin(angle))*math.min(4,ctx.Config.InstinctMaxDistance)
             local outside=true;for _,box in ipairs(boxes) do if inside(box,goal) then outside=false;break end end
-            if outside and safe(root,goal,nil,boxes) then return execute(root,goal,"Manual test (not attack detection)","Test dodge button") end
+            if outside and safe(root,goal,nil,boxes) then return execute(root,goal,"Manual test (not attack detection)","Test dodge button",true) end
         end
         M.Status="Test blocked: "..M.LastBlock;log(M.Status);return false,M.LastBlock
     end
@@ -372,16 +399,30 @@ return function(ctx)
                 local otherChar,otherHum,otherRoot=ctx.Body(plr)
                 if otherRoot and otherChar:GetAttribute("inArena")~=false then
                     local record=records[plr];local distance=(root.Position-otherRoot.Position).Magnitude
-                    local range=record and record.Cue and record.Cue.Ability and ctx.Config.InstinctRange or 10
-                    if record and record.Cue and clock-record.Cue.At<0.4 and distance>0.2 and distance<=range and math.abs(root.Position.Y-otherRoot.Position.Y)<8
-                        and ctx.Sight(root.Position,otherRoot.Position,otherChar) and (not bestDistance or distance<bestDistance) then
-                        bestRecord,bestRoot,bestDistance=record,otherRoot,distance
+                    if record and record.Cue then
+                        local range=ctx.Config.InstinctRange
+                        local age=clock-record.Cue.At
+                        local reason
+                        if age>=0.4 then reason="Cue expired before a move" end
+                        if not reason and (distance<=0.2 or distance>range) then reason="Outside configured nearby range" end
+                        if not reason and math.abs(root.Position.Y-otherRoot.Position.Y)>=8 then reason="Different elevation" end
+                        if not reason and not ctx.Sight(root.Position,otherRoot.Position,otherChar) then reason="Attacker hidden by solid obstruction" end
+                        if reason then
+                            decision(record,reason)
+                        elseif not bestDistance or distance<bestDistance then
+                            bestRecord,bestRoot,bestDistance=record,otherRoot,distance
+                        end
                     end
                 else remove(plr) end
             else remove(plr) end
         end
         local stale={};for plr in pairs(records) do if plr.Parent~=Players then table.insert(stale,plr) end end;for _,plr in ipairs(stale) do remove(plr) end
-        if not bestRoot or clock<retry or #overlapping>0 then if not M.Dodging then M.Status="Watching nearby attacks" end;return end
+        if not bestRoot or clock<retry or #overlapping>0 then
+            if bestRecord and clock<retry then decision(bestRecord,"Waiting for short movement cooldown") end
+            if not M.Dodging then M.Status="Watching nearby attacks" end
+            return
+        end
+        decision(bestRecord,"Nearby cue accepted; checking destinations")
         -- No replicated hitbox: this is an estimate, not an assertion about the game's damage volume.
         local toward=Vector3.new(bestRoot.Position.X-root.Position.X,0,bestRoot.Position.Z-root.Position.Z)
         if toward.Magnitude<0.2 then return end;toward=toward.Unit
@@ -393,10 +434,11 @@ return function(ctx)
                 for _,direction in ipairs(candidates) do
                     local goal=root.Position+direction*length;local outside=true
                     for _,box in ipairs(boxes) do if inside(box,goal) then outside=false;break end end
-                    if outside and safe(root,goal,bestRecord.Character,boxes) and execute(root,goal,"Short dodge · hitbox unknown",reason) then bestRecord.Cue=nil;return end
+                    if outside and safe(root,goal,bestRecord.Character,boxes) and execute(root,goal,"Short dodge · hitbox unknown",reason) then decision(bestRecord,"Automatic dodge requested");bestRecord.Cue=nil;return end
                 end
             end
         end
+        decision(bestRecord,"No clear local destination")
         retry=clock+0.12;M.Status="Dodge blocked: "..M.LastBlock
     end
     function M.Destroy()

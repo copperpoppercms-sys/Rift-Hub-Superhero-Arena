@@ -281,7 +281,7 @@ local function findName(root,name)
 	for _,child in ipairs(root:GetChildren()) do local result=findName(child,name); if result then return result end end
 end
 local api=boot()
-check(api.Version=="5.2" and not api.Enabled,"auto play should start off")
+check(api.Version=="5.3" and not api.Enabled,"auto play should start off")
 local play=findName(api.Gui,"Play")
 check(play and play.Text=="PLAY","one Play button missing")
 check(findName(api.Gui,"Tab_combat") and findName(api.Gui,"Tab_visuals") and findName(api.Gui,"Tab_settings"),"full interface tabs missing")
@@ -977,8 +977,49 @@ local function interfaceVisualInstinctChecks()
     place(Vector3.new());api.Instinct.TestDodge();place(Vector3.new());stepDefense(2)
     check(api.Instinct.Motion:find("Move not retained",1,true),"a rejected position write was labelled as a confirmed dodge")
     local copied=api.CopyDodgeReport()
-    check(copied:find("5.2",1,true) and copied:find("Ultra Instinct live report",1,true),"dedicated dodge copy report missing")
+    check(copied:find("5.3",1,true) and copied:find("Ultra Instinct live report",1,true),"dedicated dodge copy report missing")
     animation:Destroy();track:Destroy();observed:Destroy();api.SetOption("UltraInstinct",false)
+    -- Replay the live report: neutral, busy=false, canAttack=true, Action4 and castLocked.
+    stepDefense(8);place(Vector3.new());enemy.Position=Vector3.new(20,0,0)
+    enemyChar:SetAttribute("busy",false);enemyChar:SetAttribute("canAttack",true)
+    enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("castLocked",false)
+    api.SetOption("InstinctRange",24);api.SetOption("UltraInstinct",true);stepDefense(1)
+    local auto=api.Instinct.AutomaticMoves;local tests=api.Instinct.TestMoves
+    enemyChar:SetAttribute("castLocked",true);stepDefense(1)
+    check(api.Instinct.AutomaticMoves==auto+1 and api.Instinct.TestMoves==tests,"live-report castLocked with busy=false failed to trigger an automatic dodge")
+    check(api.Instinct.LastCue:find("castLocked",1,true),"cast-lock cue lost its estimated source")
+    stepDefense(8);check(api.Instinct.AutomaticMoves==auto+1,"sustained cast lock repeatedly teleported the character")
+    place(Vector3.new());auto=api.Instinct.AutomaticMoves
+    local unnamed=node("Animation","Animation");unnamed.AnimationId="rbxassetid://83127346512820"
+    local action=node("AnimationTrack","Animation");action.Animation=unnamed;action.Priority=Enum.AnimationPriority.Action4
+    enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator").AnimationPlayed:Fire(action)
+    stepDefense(1)
+    check(api.Instinct.AutomaticMoves==auto+1,"unnamed Action4 under castLocked was ignored without busy")
+    stepDefense(8);place(Vector3.new());enemyChar:SetAttribute("castLocked",false);stepDefense(1)
+    auto=api.Instinct.AutomaticMoves;enemyChar:SetAttribute("state","skill");stepDefense(1)
+    check(api.Instinct.AutomaticMoves==auto+1,"reported state=skill was not treated as an ability cue")
+    stepDefense(8);place(Vector3.new());enemyChar:SetAttribute("state","neutral")
+    enemy.Position=Vector3.new(10.1,0,0);auto=api.Instinct.AutomaticMoves
+    enemyChar:SetAttribute("lastSwing",204);stepDefense(1)
+    check(api.Instinct.AutomaticMoves==auto+1,"configured range was ignored by melee just beyond the old ten-stud cap")
+    stepDefense(8);place(Vector3.new());enemy.Position=Vector3.new(25,0,0);auto=api.Instinct.AutomaticMoves
+    enemyChar:SetAttribute("lastSwing",205);stepDefense(1)
+    check(api.Instinct.AutomaticMoves==auto and api.Instinct.LastDecision=="Outside configured nearby range","outside-range cue moved the player or was silently discarded")
+    stepDefense(8);place(Vector3.new());enemy.Position=Vector3.new(10,0,0);wall=true
+    enemyChar:SetAttribute("lastSwing",206);stepDefense(1)
+    check(api.Instinct.AutomaticMoves==auto and api.Instinct.LastDecision=="Attacker hidden by solid obstruction","occluded cue was not explained")
+    wall=false;stepDefense(8);place(Vector3.new());enemy.Position=Vector3.new(20,0,0);auto=api.Instinct.AutomaticMoves
+    action.Priority=Enum.AnimationPriority.Movement
+    enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator").AnimationPlayed:Fire(action);stepDefense(1)
+    check(api.Instinct.AutomaticMoves==auto,"generic locomotion animation triggered a dodge")
+    action.Priority=Enum.AnimationPriority.Action4
+    enemyChar:FindFirstChildOfClass("Humanoid"):FindFirstChildOfClass("Animator").AnimationPlayed:Fire(action);stepDefense(1)
+    check(api.Instinct.AutomaticMoves==auto,"unconfirmed Action4 without cast lock or combat lock triggered a dodge")
+    api.SetOption("UltraInstinct",false);stepDefense(8);place(Vector3.new());auto=api.Instinct.AutomaticMoves;tests=api.Instinct.TestMoves
+    api.Instinct.RecordEncounter();api.Instinct.TestDodge()
+    check(api.Instinct.AutomaticMoves==auto and api.Instinct.TestMoves==tests+1,"manual test inflated the automatic-dodge counter")
+    check(api.Instinct.Diagnostics():find("automatic=0, tests=1",1,true),"encounter deltas failed to separate manual tests and automatic requests")
+    stepDefense(101);action:Destroy();unnamed:Destroy();enemyChar:SetAttribute("state","neutral");enemyChar:SetAttribute("castLocked",nil)
     -- Auto Farm leaves ControlModule enabled and yields to keyboard/joystick input.
     local disabled=0;local moveVector=Vector3.new()
     local controls={controlsEnabled=true,Disable=function() disabled+=1 end,Enable=function() end,GetMoveVector=function() return moveVector end}
