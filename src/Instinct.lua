@@ -1,7 +1,7 @@
--- Short native-movement defense. No teleport, custom velocity, speed changes or cooldown bypass.
+-- Short native-movement defense. No teleport, custom velocity or cooldown bypass. Optional short WalkSpeed bursts restore owned changes.
 return function(ctx)
     local Players=game:GetService("Players")
-    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
+    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,SpeedBursts=0,LastSpeedResult="No burst",LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
     local records,tracked,pending={},{ },{}
     local clock,age,retry,holdUntil=0,0,0,0
     local enabled,dead=false,false
@@ -44,6 +44,7 @@ return function(ctx)
             "Attack cues: "..M.Cues.." | animations seen: "..M.Animations.." | hitboxes tracked: "..M.TrackedHitboxes,
             "Clearance attempts: "..M.Attempts.." | move requests: "..M.Reactions.." (automatic="..M.AutomaticMoves..", manual tests="..M.TestMoves..")",
             "Last automatic decision: "..M.LastDecision,
+            "Speed bursts: "..M.SpeedBursts.." | requested speed="..ctx.Config.InstinctBurstSpeed.." | "..M.LastSpeedResult,
             "Movement requests: native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
             "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
             "Movement observation: "..M.Motion.." | last observed travel="..tostring(M.LastObservedTravel),
@@ -92,13 +93,34 @@ return function(ctx)
     end
     function M.Stop()
         local old=motion;motion=nil;M.Dodging=false;holdUntil=0
+        if old and old.BoostSpeed then
+            pcall(function()
+                -- Do not overwrite a speed that the game changed during the maneuver.
+                if math.abs(old.Hum.WalkSpeed-old.BoostSpeed)<0.01 then
+                    old.Hum.WalkSpeed=old.BaseSpeed;M.LastSpeedResult="Restored speed "..old.BaseSpeed
+                else M.LastSpeedResult="Game changed speed; preserved "..old.Hum.WalkSpeed end
+            end)
+        end
         if old and old.Hum.Parent then
             pcall(function()
                 if ctx.CanRun() and ctx.ManualMovement() then ctx.ResumeMovement(old.Hum) else old.Hum:Move(Vector3.new(),false) end
             end)
         end
     end
-    function M.Steer()
+    local function startBurst(active)
+        if not ctx.Config.FastSidestep then return end
+        local original=active.Hum.WalkSpeed
+        local requested=math.max(original,ctx.Config.InstinctBurstSpeed)
+        if requested<=original then return end
+        active.BaseSpeed=original;active.BoostSpeed=requested
+        active.Hum.WalkSpeed=requested
+        M.SpeedBursts+=1;M.LastSpeedResult="Burst requested at speed "..requested
+        local remaining=(active.Goal-active.Root.Position).Magnitude
+        local window=math.min(remaining/requested+0.02,0.25)
+        holdUntil=clock+window;active.WallUntil=os.clock()+window;M.LastAssistWindow=window
+        log(M.LastSpeedResult.."; planned distance="..string.format("%.2f",remaining))
+    end
+    function M.Steer(dt)
         if not motion or not M.Dodging then return end
         if not ctx.CanRun() then M.Stop();M.Status="Paused for input or camera";return end
         local intent=ctx.MovementIntent()
@@ -107,15 +129,28 @@ return function(ctx)
         end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute("canRun")==false then M.Stop();return end
+        if motion.BoostSpeed and math.abs(hum.WalkSpeed-motion.BoostSpeed)>0.01 then
+            M.Stop();M.Status="Burst stopped: game changed speed";return
+        end
+        if motion.PendingBoost and clock>=motion.PendingBoost then
+            motion.PendingBoost=nil
+            -- A native request may be ignored. Only boost if the game did not change speed or start fast travel.
+            if hum.WalkSpeed==motion.InitialSpeed and root.AssemblyLinearVelocity.Magnitude<ctx.Config.InstinctBurstSpeed*0.8 then
+                startBurst(motion)
+            end
+        end
         local delta=Vector3.new(motion.Goal.X-root.Position.X,0,motion.Goal.Z-root.Position.Z)
         local travelled=(root.Position-motion.Start).Magnitude
         if clock>=holdUntil or os.clock()>=motion.WallUntil or delta.Magnitude<0.4 or travelled>=motion.Limit or delta:Dot(motion.Direction)<=0 then M.Stop();return end
         if clock>=motion.CheckAt then
             motion.CheckAt=clock+0.05
-            local checkGoal=root.Position+delta.Unit*math.min(delta.Magnitude,1.5)
+            local frameTime=math.clamp(tonumber(dt) or 1/60,0.001,0.1)
+            local checkGoal=root.Position+delta.Unit*math.min(delta.Magnitude,math.max(1.5,hum.WalkSpeed*frameTime+0.5))
             if not safe(root,checkGoal,nil,motion.Boxes) then M.Stop();M.Status="Sidestep stopped: obstruction";return end
         end
-        hum:Move(delta.Unit,false)
+        local frameTime=math.clamp(tonumber(dt) or 1/60,0.001,0.1)
+        local strength=math.min(1,delta.Magnitude/(math.max(hum.WalkSpeed,1)*frameTime))
+        hum:Move(delta.Unit*strength,false)
     end
     local function remove(plr)
         local record=records[plr]
@@ -322,13 +357,13 @@ return function(ctx)
         if distance<0.2 or distance>ctx.Config.InstinctMaxDistance+0.001 then return false end
         local char,hum,current=ctx.Body(Players.LocalPlayer)
         if current~=root or not eligible(char,hum,root) then M.LastBlock="Movement unavailable";return false end
+        M.Stop()
         local speed=tonumber(hum.WalkSpeed) or 0
         if speed<=0 then M.LastBlock="Normal walking speed is zero";return false end
-        M.Stop()
         local direction=offset.Unit
         local moving=ctx.ManualMovement()
         local window=math.min(distance/speed,0.5)
-        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,MovingAssist=moving,Intent=ctx.MovementIntent(),WallUntil=os.clock()+window}
+        motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,InitialSpeed=speed,MovingAssist=moving,Intent=ctx.MovementIntent(),WallUntil=os.clock()+window}
         M.LastAssistWindow=window
         M.Dodging=true
         -- Set a normal walking direction before requesting the game's dash input.
@@ -340,10 +375,13 @@ return function(ctx)
             M.NativeDashes+=1;mode="Native dash requested"
             -- Keep a brief normal walking input too: requesting input does not prove the game accepted a dash.
             holdUntil=clock+window
+            if ctx.Config.FastSidestep then motion.PendingBoost=clock+0.08 end
         else
             if not manual then M.Sidesteps+=1 end
             mode=manual and "Test sidestep (normal speed)" or "Walking sidestep · "..M.LastDash
             holdUntil=clock+window
+            startBurst(motion)
+            if motion.BoostSpeed then mode=manual and "Test speed burst" or "Fast sidestep · "..M.LastDash end
         end
         probe={Root=root,Start=root.Position,Goal=goal,At=clock,Direction=direction,Distance=math.min(distance,speed*0.12)}
         M.Motion="Movement input requested; waiting for position observation"
@@ -390,7 +428,7 @@ return function(ctx)
         clock+=dt;age+=dt;observeMove()
         if M.Recording and clock>=recordUntil then M.Recording=false;log("Encounter recording complete; copy dodge report") end
         if not observing() then
-            if motion then M.Steer();if motion then return end end
+            if motion then M.Steer(dt);if motion then return end end
             if enabled then clear() end;enabled=false;M.Stop();retry=0;age=0;M.Status="Off";return
         end
         if not enabled then
@@ -405,7 +443,7 @@ return function(ctx)
         if not canRun then M.Stop();M.Status="Paused: "..(pause or "input or camera");return end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         if not eligible(char,hum,root) then M.Stop();M.Status="Waiting for movable character";return end
-        if motion then M.Steer();if motion then return end end
+        if motion then M.Steer(dt);if motion then return end end
         if age<0.025 then return end;age=0
         -- Parenting can precede names/attributes; give new parts a short metadata window.
         for part,at in pairs(pending) do
