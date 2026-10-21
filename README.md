@@ -1,10 +1,23 @@
-# Rift Hub · Superhero Arena · v5.9
+# Rift Hub · Superhero Arena · v6.0
 
 Full animated standalone UI for [Superhero Arena by The Duelists](https://www.roblox.com/games/78710221869926/Superhero-Arena). Place `78710221869926`, universe `10765491459`.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/main.lua"))()
 ```
+
+## Combined feature update
+
+Rift's interface now includes the linked script's requested features, implemented through the existing game-aware controls:
+
+- **Auto Farm** retains normal movement, target selection and hero skill scheduling. Cash rewards remain controlled by the game; no direct cash-grant feature is claimed.
+- **Fast Attack** requests nearby basic attacks through the detected mobile/HUD controls. It works independently, or adjusts the farm scheduler's fallback request interval. Known game attack intervals, busy/canAttack gates and server cooldowns still apply.
+- **Low-health retreat** replaces the linked script's arbitrary 300-stud upward teleport with a checked short walking escape. Health threshold is adjustable; it yields to joystick input and pauses Auto Farm while retreating.
+- **Movement → WalkSpeed** applies the requested value once, restores only its own write and preserves game overrides. Turn it off/on or change the slider to make a new request after a game override.
+
+The UI adds a Movement page, animated tab marker, subtle surface gradient, animated switches and button hover/press effects. Reduce motion remains available. Existing role ESP and optional Ultra Instinct controls are retained. All new automation starts off.
+
+`build.py` synchronizes embedded feature modules and the full editable HTML code field. The separate diagnostic snippet remains a small read-only helper.
 
 ## Combat
 
@@ -18,7 +31,7 @@ Destination planning uses expanded client-visible attack-part bounds when a reco
 
 Teleport requests do not wait for the walking `canRun`, `LOCKED_INPUTS` or ability/cutscene attributes to clear, and never rewrite those fields. This only permits a local relocation request; it does not defeat the game's actual locks or guarantee persistence. A missing/dead character, anchored root, unavailable hero/out-of-arena state or paused input/camera context still blocks requests. Native-dash-only tests retain the normal game movement gates. The game may reject or correct the teleport, especially while it owns movement.
 
-**Use:** re-execute v5.9, enable Ultra Instinct under Combat, and leave Teleport dodge on. **Test teleport** previews the capped local move independently of automatic detection. **Record nearby attacks** observes a short encounter; recording alone does not enable automatic teleporting. **Copy dodge report** distinguishes teleport requests, automatic/manual tests, native/walking requests, movement gates and local displacement/correction observations. It does not prove server acceptance.
+**Use:** re-execute v6.0, enable Ultra Instinct under Combat, and leave Teleport dodge on. **Test teleport** previews the capped local move independently of automatic detection. **Record nearby attacks** observes a short encounter; recording alone does not enable automatic teleporting. **Copy dodge report** distinguishes teleport requests, automatic/manual tests, native/walking requests, movement gates and local displacement/correction observations. It does not prove server acceptance.
 
 **Optional walking mode:** turning Teleport dodge off exposes Fast sidestep, Burst speed and Test game dash. Existing native dash timing and game gates remain enforced. A local burst defaults to speed 64, lasts at most 0.25 seconds, and restores only its owned speed changes. Game speed overrides are preserved and suspend further bursts on that character/controller session; bounded walking can continue at game-controlled speed. Manual movement-vector changes return control immediately. Death, focus/typing/dragging, game locks, disabling and unloading release owned walking/speed input.
 

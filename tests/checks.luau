@@ -281,7 +281,14 @@ local function findName(root,name)
 	for _,child in ipairs(root:GetChildren()) do local result=findName(child,name); if result then return result end end
 end
 local api=boot()
-check(api.Version=="5.9" and not api.Enabled,"auto play should start off")
+check(api.Version=="6.0" and not api.Enabled,"auto play should start off")
+check(not api.Config.FastAttack and not api.Config.SpeedEnabled and not api.Config.AutoSafeTeleport,"new automation should start disabled")
+check(findName(api.Gui,"Tab_movement") and findName(api.Gui,"FastAttack") and findName(api.Gui,"SafeHealthThreshold"),"combined controls missing")
+findName(api.Gui,"FastAttack").Activated:Fire();check(api.Config.FastAttack,"fast attack toggle disconnected")
+findName(api.Gui,"FastAttack").Activated:Fire()
+check(api.SetOption("AttackDelay",0.01) and api.Config.AttackDelay==0.15,"attack interval bounds missing")
+api.SetOption("AttackDelay",0.2)
+
 local play=findName(api.Gui,"Play")
 check(play and play.Text=="PLAY","one Play button missing")
 check(findName(api.Gui,"Tab_combat") and findName(api.Gui,"Tab_visuals") and findName(api.Gui,"Tab_settings"),"full interface tabs missing")

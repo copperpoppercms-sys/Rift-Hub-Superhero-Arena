@@ -12,7 +12,7 @@
 </head>
 <body>
 <header>
-<div class="bar"><div><h1>RIFT HUB / SUPERHERO ARENA · v5.9</h1><p>Animated UI · Combat + Visuals · Full editable Lua</p></div><div class="actions"><button id="copy" type="button">Copy all code</button><button id="select" type="button">Select all</button><a id="download" href="#" download="RiftHub_SuperheroArena.lua">Download .lua</a></div></div>
+<div class="bar"><div><h1>RIFT HUB / SUPERHERO ARENA · v6.0</h1><p>Animated UI · Auto Farm · Fast Attack · Low-health retreat · Speed controls</p></div><div class="actions"><button id="copy" type="button">Copy all code</button><button id="select" type="button">Select all</button><a id="download" href="#" download="RiftHub_SuperheroArena.lua">Download .lua</a></div></div>
 <div id="status" role="status" aria-live="polite">Edit the code below, then copy or download your version.</div>
 </header>
 <main><p class="note">Tap anywhere in the code to type or edit. Copy all code and Download .lua use your latest edits. Download your edited file to keep your changes.</p><details><summary>Copy a controls, role and defense report</summary><p>For a missed dodge: teleport mode is selected by default. Use Combat → Test teleport to preview a capped local relocation. Enable Ultra Instinct, tap Record nearby attacks, encounter one nearby attack, then tap Copy dodge report. Test teleport previews the selected local teleport mode. Turn Teleport dodge off to expose walking/native controls and their separate tests. Server acceptance and avoidance of every ability are not guaranteed. For the general controls and roles report, use the read-only snippet below.</p><button id="reportCopy" type="button">Copy control report script</button><textarea id="reportSource" aria-label="Control report script" readonly spellcheck="false" rows="16" style="display:block;width:100%;margin:12px 0;background:#17191d;color:#e0e3eb">-- Run AFTER the full hub, while your hero's combat HUD is visible.
@@ -32,13 +32,13 @@ else
 end
 </textarea></details><textarea id="source" aria-label="Editable Lua script" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off">-- Rift Hub / Superhero Arena / animated Combat, Visuals and Ultra Instinct.
 -- Standalone Luau. Normal movement, camera aiming, client-visible attack cues and native controls.
-local Players=game:GetService("Players")
-local Run=game:GetService("RunService")
-local Input=game:GetService("UserInputService")
+local Players=game:GetService(&quot;Players&quot;)
+local Run=game:GetService(&quot;RunService&quot;)
+local Input=game:GetService(&quot;UserInputService&quot;)
 local LocalPlayer=Players.LocalPlayer
-local env=type(getgenv)=="function" and getgenv() or _G
+local env=type(getgenv)==&quot;function&quot; and getgenv() or _G
 local previous=env.SuperheroArenaHub
-if type(previous)=="table" and type(previous.Unload)=="function" then pcall(previous.Unload) end
+if type(previous)==&quot;table&quot; and type(previous.Unload)==&quot;function&quot; then pcall(previous.Unload) end
 local alive,focused,dragging=true,true,false
 local connections,held={},{}
 local function connect(signal,fn) local c=signal:Connect(fn); table.insert(connections,c); return c end
@@ -51,37 +51,37 @@ local Brand=(function()
 return function(url)
 	local M={}
 	local asset,started=nil,false
-	local targets=setmetatable({},{__mode="k"})
+	local targets=setmetatable({},{__mode=&quot;k&quot;})
 	local function paint(image,fallback)
 		if not image.Parent or not image.Parent.Parent or not asset then return end
 		image.Image=asset; image.Visible=true
-		if fallback and fallback.Parent then fallback.Text="" end
+		if fallback and fallback.Parent then fallback.Text=&quot;&quot; end
 	end
 	function M.Apply(image,fallback)
-		local viewport=Instance.new("Frame")
-		viewport.Name="RiftLogoViewport"; viewport.BackgroundTransparency=1; viewport.BorderSizePixel=0; viewport.ClipsDescendants=true
+		local viewport=Instance.new(&quot;Frame&quot;)
+		viewport.Name=&quot;RiftLogoViewport&quot;; viewport.BackgroundTransparency=1; viewport.BorderSizePixel=0; viewport.ClipsDescendants=true
 		viewport.Position=image.Position; viewport.Size=image.Size; viewport.AnchorPoint=image.AnchorPoint
 		viewport.LayoutOrder=image.LayoutOrder; viewport.ZIndex=image.ZIndex; viewport.Parent=image.Parent
 		image.Parent=viewport; image.AnchorPoint=Vector2.new()
 		image.Position=UDim2.fromScale(-374/520,-298/520); image.Size=UDim2.fromScale(1254/520,1254/520)
-		image.Name="RiftLogo"; image.ImageRectOffset=Vector2.new(); image.ImageRectSize=Vector2.new()
+		image.Name=&quot;RiftLogo&quot;; image.ImageRectOffset=Vector2.new(); image.ImageRectSize=Vector2.new()
 		image.ImageColor3=Color3.new(1,1,1); image.ScaleType=Enum.ScaleType.Stretch; image.Visible=false
 		targets[image]=fallback or false
 		if asset then paint(image,fallback); return end
 		if started then return end; started=true
 		task.spawn(function()
 			local ok,result=pcall(function()
-				local customAsset=type(getcustomasset)=="function" and getcustomasset or type(getsynasset)=="function" and getsynasset
-				assert(customAsset and type(writefile)=="function" and type(isfile)=="function","Custom images unavailable")
-				local path="RiftHub/rift-logo-92145dc6000c.jpg"
-				if type(isfolder)=="function" and type(makefolder)=="function" and not isfolder("RiftHub") then makefolder("RiftHub") end
+				local customAsset=type(getcustomasset)==&quot;function&quot; and getcustomasset or type(getsynasset)==&quot;function&quot; and getsynasset
+				assert(customAsset and type(writefile)==&quot;function&quot; and type(isfile)==&quot;function&quot;,&quot;Custom images unavailable&quot;)
+				local path=&quot;RiftHub/rift-logo-92145dc6000c.jpg&quot;
+				if type(isfolder)==&quot;function&quot; and type(makefolder)==&quot;function&quot; and not isfolder(&quot;RiftHub&quot;) then makefolder(&quot;RiftHub&quot;) end
 				if not isfile(path) then
 					local bytes=game:HttpGet(url)
-					assert(type(bytes)=="string" and bytes:sub(1,3)==string.char(255,216,255),"Invalid Rift logo")
+					assert(type(bytes)==&quot;string&quot; and bytes:sub(1,3)==string.char(255,216,255),&quot;Invalid Rift logo&quot;)
 					writefile(path,bytes)
 				end
 				local content=customAsset(path)
-				assert(type(content)=="string" and content~="","Image registration failed")
+				assert(type(content)==&quot;string&quot; and content~=&quot;&quot;,&quot;Image registration failed&quot;)
 				return content
 			end)
 			if not ok then return end
@@ -92,22 +92,22 @@ return function(url)
 	end
 	return M
 end
-end)()("https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/assets/rift_logo.jpg")
-local function normalize(value) return type(value)=="string" and value:lower():gsub("[^%w]","") or "" end
-local API={Game="Superhero Arena",Version="5.9",Enabled=false,Target=nil,Status="Off"}
-local Config={ESP=true,Chams=true,Names=true,Roles=true,ChamOpacity=0.45,GuessRoles=true,
+end)()(&quot;https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/assets/rift_logo.jpg&quot;)
+local function normalize(value) return type(value)==&quot;string&quot; and value:lower():gsub(&quot;[^%w]&quot;,&quot;&quot;) or &quot;&quot; end
+local API={Game=&quot;Superhero Arena&quot;,Version=&quot;6.0&quot;,Enabled=false,Target=nil,Status=&quot;Off&quot;}
+local Config={FastAttack=false,AttackDelay=0.2,AutoSafeTeleport=false,SafeHealthThreshold=30,SpeedEnabled=false,WalkSpeed=24,ESP=true,Chams=true,Names=true,Roles=true,ChamOpacity=0.45,GuessRoles=true,
     UltraInstinct=false,TeleportDodge=true,InstinctRange=24,InstinctMaxDistance=12,FastSidestep=true,InstinctBurstSpeed=64,ReduceMotion=false}
 API.Config=Config
 local featureCleanup={}
-local gui=create("ScreenGui",{Name="RiftAutoPlay",ResetOnSpawn=false,IgnoreGuiInset=true,DisplayOrder=900},nil)
+local gui=create(&quot;ScreenGui&quot;,{Name=&quot;RiftAutoPlay&quot;,ResetOnSpawn=false,IgnoreGuiInset=true,DisplayOrder=900},nil)
 do
-	local ok=pcall(function() gui.Parent=type(gethui)=="function" and gethui() or game:GetService("CoreGui") end)
-	if not ok or not gui.Parent then gui.Parent=LocalPlayer:WaitForChild("PlayerGui") end
+	local ok=pcall(function() gui.Parent=type(gethui)==&quot;function&quot; and gethui() or game:GetService(&quot;CoreGui&quot;) end)
+	if not ok or not gui.Parent then gui.Parent=LocalPlayer:WaitForChild(&quot;PlayerGui&quot;) end
 end
 local vim,pathService,actionService
-pcall(function() vim=game:GetService("VirtualInputManager") end)
-pcall(function() pathService=game:GetService("PathfindingService") end)
-pcall(function() actionService=game:GetService("ContextActionService") end)
+pcall(function() vim=game:GetService(&quot;VirtualInputManager&quot;) end)
+pcall(function() pathService=game:GetService(&quot;PathfindingService&quot;) end)
+pcall(function() actionService=game:GetService(&quot;ContextActionService&quot;) end)
 local statusLabel,playButton
 local function status(value)
 	API.Status=value
@@ -116,12 +116,12 @@ local function status(value)
 end
 local function body(plr)
 	if not plr then return end
-	local entities=workspace:FindFirstChild("Entities")
+	local entities=workspace:FindFirstChild(&quot;Entities&quot;)
 	local entity=entities and entities:FindFirstChild(plr.Name)
 	for _,char in ipairs({plr.Character or false,entity or false}) do
-		local hum=char and char:FindFirstChildOfClass("Humanoid")
-		local root=char and char:FindFirstChild("HumanoidRootPart")
-		if char and char.Parent and hum and hum.Health&gt;0 and root and root:IsA("BasePart") then return char,hum,root end
+		local hum=char and char:FindFirstChildOfClass(&quot;Humanoid&quot;)
+		local root=char and char:FindFirstChild(&quot;HumanoidRootPart&quot;)
+		if char and char.Parent and hum and hum.Health&gt;0 and root and root:IsA(&quot;BasePart&quot;) then return char,hum,root end
 	end
 end
 local function release(press)
@@ -135,17 +135,17 @@ local function release(press)
 end
 local function releaseAll() for press in pairs(held) do release(press) end end
 local function pulseKey(key,holdTime)
-    if Input.TouchEnabled then return false,"Touch mode: use the mobile game control" end
-	if not vim then return false,"Key input unavailable" end
+    if Input.TouchEnabled then return false,&quot;Touch mode: use the mobile game control&quot; end
+	if not vim then return false,&quot;Key input unavailable&quot; end
 	for press in pairs(held) do if press.Key==key then release(press) end end
 	local ok,err=pcall(function() vim:SendKeyEvent(true,key,false,game) end)
-	if not ok then API.LastInputError=tostring(err); return false,"Key input unavailable" end
-	API.LastInput="Key requested: "..tostring(key)
+	if not ok then API.LastInputError=tostring(err); return false,&quot;Key input unavailable&quot; end
+	API.LastInput=&quot;Key requested: &quot;..tostring(key)
 	local press={Key=key}; held[press]=true
 	task.delay(holdTime or 0.05,function() release(press) end)
 	return true
 end
--- Auto Farm never disables Roblox's ControlModule. Real movement input pauses automation.
+-- Auto Farm never disables Roblox&#x27;s ControlModule. Real movement input pauses automation.
 local readControls,lastControlsTry=nil,-math.huge
 local manualKeys,manualTouches={},{}
 local function restoreControls() end
@@ -153,8 +153,8 @@ local function manualMovement()
     if not readControls and os.clock()-lastControlsTry&gt;1 then
         lastControlsTry=os.clock()
         pcall(function()
-            local scripts=LocalPlayer:FindFirstChild("PlayerScripts")
-            local module=scripts and scripts:FindFirstChild("PlayerModule")
+            local scripts=LocalPlayer:FindFirstChild(&quot;PlayerScripts&quot;)
+            local module=scripts and scripts:FindFirstChild(&quot;PlayerModule&quot;)
             if module then readControls=require(module):GetControls() end
         end)
     end
@@ -191,62 +191,62 @@ local function visible(button)
 	if not button.Parent then return false end
 	local node=button
 	while node do
-		if node:IsA("GuiObject") and not node.Visible or node:IsA("ScreenGui") and not node.Enabled then return false end
+		if node:IsA(&quot;GuiObject&quot;) and not node.Visible or node:IsA(&quot;ScreenGui&quot;) and not node.Enabled then return false end
 		node=node.Parent
 	end
 	return true
 end
-for slot=5,8 do slotNames["skill"..slot]=slot; slotNames["ability"..slot]=slot end
--- Confirmed by the user's HUD_Mobile.AbilityBar control report.
-for slot=1,8 do slotNames["abilityicon"..slot]=slot end
+for slot=5,8 do slotNames[&quot;skill&quot;..slot]=slot; slotNames[&quot;ability&quot;..slot]=slot end
+-- Confirmed by the user&#x27;s HUD_Mobile.AbilityBar control report.
+for slot=1,8 do slotNames[&quot;abilityicon&quot;..slot]=slot end
 slotNames.ultimate=5; slotNames.ultimateskill=5
-local attackNames={"Attack","AttackButton","Punch","PunchButton","M1","M1Button","BasicAttack","LightAttack","MeleeAttack"}
-local dashNames={"Dash","DashButton","Dodge","DodgeButton"}
+local attackNames={&quot;Attack&quot;,&quot;AttackButton&quot;,&quot;Punch&quot;,&quot;PunchButton&quot;,&quot;M1&quot;,&quot;M1Button&quot;,&quot;BasicAttack&quot;,&quot;LightAttack&quot;,&quot;MeleeAttack&quot;}
+local dashNames={&quot;Dash&quot;,&quot;DashButton&quot;,&quot;Dodge&quot;,&quot;DodgeButton&quot;}
 local actionRoles={}
-for _,name in ipairs(attackNames) do actionRoles[normalize(name)]="attack" end
-for _,name in ipairs(dashNames) do actionRoles[normalize(name)]="dash" end
+for _,name in ipairs(attackNames) do actionRoles[normalize(name)]=&quot;attack&quot; end
+for _,name in ipairs(dashNames) do actionRoles[normalize(name)]=&quot;dash&quot; end
 local function actionWord(name)
 	local word=normalize(name)
-	for _,prefix in ipairs({"combat","hero"}) do
+	for _,prefix in ipairs({&quot;combat&quot;,&quot;hero&quot;}) do
 		if word:sub(1,#prefix)==prefix then word=word:sub(#prefix+1); break end
 	end
-	if word:sub(-6)=="action" then word=word:sub(1,-7) end
+	if word:sub(-6)==&quot;action&quot; then word=word:sub(1,-7) end
 	return word
 end
 local boundActions={}
-local keyNames={["1"]="One",["2"]="Two",["3"]="Three",["4"]="Four",["5"]="Five",["6"]="Six",["7"]="Seven",["8"]="Eight"}
+local keyNames={[&quot;1&quot;]=&quot;One&quot;,[&quot;2&quot;]=&quot;Two&quot;,[&quot;3&quot;]=&quot;Three&quot;,[&quot;4&quot;]=&quot;Four&quot;,[&quot;5&quot;]=&quot;Five&quot;,[&quot;6&quot;]=&quot;Six&quot;,[&quot;7&quot;]=&quot;Seven&quot;,[&quot;8&quot;]=&quot;Eight&quot;}
 local function readKey(value)
-	if type(value)~="string" or value=="" then return nil end
+	if type(value)~=&quot;string&quot; or value==&quot;&quot; then return nil end
 	local key
 	pcall(function() key=Enum.KeyCode[keyNames[value] or (#value==1 and value:upper() or value)] end)
 	return key
 end
 local function scan()
 	controls={}; controlAge=0
-	local pg=LocalPlayer:FindFirstChild("PlayerGui")
+	local pg=LocalPlayer:FindFirstChild(&quot;PlayerGui&quot;)
 	for i,button in ipairs(pg and pg:GetDescendants() or {}) do
 		if i&gt;3000 then break end
-		if button:IsA("GuiButton") and not button:IsDescendantOf(gui) and visible(button) then
+		if button:IsA(&quot;GuiButton&quot;) and not button:IsDescendantOf(gui) and visible(button) then
 			local item={Button=button,Words={}}
 			item.Words[normalize(button.Name)]=true
-			if button:IsA("TextButton") then item.Words[normalize(button.Text)]=true end
-			item.Slot=tonumber(button:GetAttribute("SkillSlot") or button:GetAttribute("AbilitySlot")) or slotNames[normalize(button.Name)]
-			local name=button:GetAttribute("SkillName") or button:GetAttribute("AbilityName")
-			if type(name)=="string" then item.Words[normalize(name)]=true end
-			item.Key=readKey(button:GetAttribute("KeyCode") or button:GetAttribute("Keybind"))
+			if button:IsA(&quot;TextButton&quot;) then item.Words[normalize(button.Text)]=true end
+			item.Slot=tonumber(button:GetAttribute(&quot;SkillSlot&quot;) or button:GetAttribute(&quot;AbilitySlot&quot;)) or slotNames[normalize(button.Name)]
+			local name=button:GetAttribute(&quot;SkillName&quot;) or button:GetAttribute(&quot;AbilityName&quot;)
+			if type(name)==&quot;string&quot; then item.Words[normalize(name)]=true end
+			item.Key=readKey(button:GetAttribute(&quot;KeyCode&quot;) or button:GetAttribute(&quot;Keybind&quot;))
 			local function readLabel(child)
-				if child:IsA("TextLabel") then
+				if child:IsA(&quot;TextLabel&quot;) then
 					item.Words[normalize(child.Text)]=true
 					local name=normalize(child.Name)
-					if name=="key" or name=="keybind" or name=="keycode" or name=="hotkey" then item.Key=item.Key or readKey(child.Text) end
+					if name==&quot;key&quot; or name==&quot;keybind&quot; or name==&quot;keycode&quot; or name==&quot;hotkey&quot; then item.Key=item.Key or readKey(child.Text) end
 				end
 			end
 			for _,child in ipairs(button:GetDescendants()) do readLabel(child) end
 			-- Many mobile HUDs put an unnamed ImageButton inside a named skill frame.
 			local parent=button.Parent
-			if parent and parent:IsA("GuiObject") then
+			if parent and parent:IsA(&quot;GuiObject&quot;) then
 				local buttonCount=0
-				for _,child in ipairs(parent:GetDescendants()) do if child:IsA("GuiButton") then buttonCount+=1 end end
+				for _,child in ipairs(parent:GetDescendants()) do if child:IsA(&quot;GuiButton&quot;) then buttonCount+=1 end end
 				if buttonCount==1 then
 					item.Words[normalize(parent.Name)]=true
 					item.Slot=item.Slot or slotNames[normalize(parent.Name)]
@@ -259,16 +259,16 @@ local function scan()
 	boundActions={}
 	if actionService then
 		local ok,info=pcall(function() return actionService:GetAllBoundActionInfo() end)
-		if ok and type(info)=="table" then boundActions=info end
+		if ok and type(info)==&quot;table&quot; then boundActions=info end
 	end
 	for name,info in pairs(boundActions) do
 		local word=actionWord(name)
-		if type(info)=="table" and (actionRoles[word] or slotNames[word] or word=="repulsorblast" or word=="unibeam") then
+		if type(info)==&quot;table&quot; and (actionRoles[word] or slotNames[word] or word==&quot;repulsorblast&quot; or word==&quot;unibeam&quot;) then
 			local key,mouse
-			for _,binding in ipairs(type(info.inputTypes)=="table" and info.inputTypes or {}) do
+			for _,binding in ipairs(type(info.inputTypes)==&quot;table&quot; and info.inputTypes or {}) do
 				pcall(function()
 					if binding.EnumType==Enum.KeyCode and binding~=Enum.KeyCode.Unknown then key=key or binding
-					elseif binding==Enum.UserInputType.MouseButton1 and actionRoles[word]=="attack" then mouse=true end
+					elseif binding==Enum.UserInputType.MouseButton1 and actionRoles[word]==&quot;attack&quot; then mouse=true end
 				end)
 			end
 			if key or mouse then table.insert(controls,{Action=name,Words={[word]=true},Slot=slotNames[word],Key=key,Mouse=mouse}) end
@@ -276,7 +276,7 @@ local function scan()
 	end
 	-- Keep the HUD cooldown metadata while using the actual CAS dash key.
 	for _,action in ipairs(controls) do
-		if action.Action and actionRoles[actionWord(action.Action)]=="dash" and action.Key then
+		if action.Action and actionRoles[actionWord(action.Action)]==&quot;dash&quot; and action.Key then
 			for _,item in ipairs(controls) do
 				if item.Button then
 					for _,name in ipairs(dashNames) do
@@ -288,9 +288,9 @@ local function scan()
 	end
 end
 local function handlerCount(event)
-	if type(getconnections)~="function" then return nil end
+	if type(getconnections)~=&quot;function&quot; then return nil end
 	local ok,list=pcall(getconnections,event)
-	if not ok or type(list)~="table" then return nil end
+	if not ok or type(list)~=&quot;table&quot; then return nil end
 	local count=0
 	for _,connection in ipairs(list) do
 		local active=true
@@ -318,41 +318,41 @@ local function find(names)
 end
 local touchSequence=700
 local function tapButton(button)
-	if not vim or not visible(button) then return false,"Mobile input unavailable" end
+	if not vim or not visible(button) then return false,&quot;Mobile input unavailable&quot; end
 	local size,pos=button.AbsoluteSize,button.AbsolutePosition
-	if size.X&lt;=0 or size.Y&lt;=0 then return false,"Game button has no visible area" end
+	if size.X&lt;=0 or size.Y&lt;=0 then return false,&quot;Game button has no visible area&quot; end
 	local x,y=pos.X+size.X/2,pos.Y+size.Y/2
-	local screen=button:FindFirstAncestorWhichIsA("ScreenGui")
+	local screen=button:FindFirstAncestorWhichIsA(&quot;ScreenGui&quot;)
 	if screen and not screen.IgnoreGuiInset then
-		pcall(function() local inset=game:GetService("GuiService"):GetGuiInset(); x+=inset.X; y+=inset.Y end)
+		pcall(function() local inset=game:GetService(&quot;GuiService&quot;):GetGuiInset(); x+=inset.X; y+=inset.Y end)
 	end
 	local camera=workspace.CurrentCamera
-	if not camera or x&lt;0 or y&lt;0 or x&gt;=camera.ViewportSize.X or y&gt;=camera.ViewportSize.Y then return false,"Game button is off screen" end
+	if not camera or x&lt;0 or y&lt;0 or x&gt;=camera.ViewportSize.X or y&gt;=camera.ViewportSize.Y then return false,&quot;Game button is off screen&quot; end
 	-- Real input reaches InputBegan/Touch handlers that firesignal(Activated) misses.
 	if Input.TouchEnabled then
 		touchSequence+=1
 		local press={Touch=touchSequence,X=x,Y=y}
 		local ok=pcall(function() vim:SendTouchEvent(press.Touch,Enum.UserInputState.Begin,x,y) end)
-		if ok then API.LastInput="Touch requested: "..button:GetFullName(); held[press]=true; task.delay(0.06,function() release(press) end); return true end
-        return false,"Executor blocked touch input"
+		if ok then API.LastInput=&quot;Touch requested: &quot;..button:GetFullName(); held[press]=true; task.delay(0.06,function() release(press) end); return true end
+        return false,&quot;Executor blocked touch input&quot;
 	end
 	local ok=pcall(function() vim:SendMouseButtonEvent(x,y,0,true,game,0) end)
-	if ok then API.LastInput="Click requested: "..button:GetFullName(); local press={X=x,Y=y}; held[press]=true; task.delay(0.06,function() release(press) end); return true end
-	return false,"Executor blocked game button input"
+	if ok then API.LastInput=&quot;Click requested: &quot;..button:GetFullName(); local press={X=x,Y=y}; held[press]=true; task.delay(0.06,function() release(press) end); return true end
+	return false,&quot;Executor blocked game button input&quot;
 end
 local function ready(item)
 	if item and item.Action then return not Input.TouchEnabled and vim~=nil end
 	local b=item and item.Button
-	if not b or not visible(b) or b:GetAttribute("OnCooldown")==true or b:GetAttribute("Ready")==false or b:GetAttribute("Available")==false or b:GetAttribute("Unlocked")==false or (tonumber(b:GetAttribute("CooldownRemaining")) or 0)&gt;0 then return false end
-	if type(firesignal)=="function" then
-		if type(getconnections)~="function" then return true end
+	if not b or not visible(b) or b:GetAttribute(&quot;OnCooldown&quot;)==true or b:GetAttribute(&quot;Ready&quot;)==false or b:GetAttribute(&quot;Available&quot;)==false or b:GetAttribute(&quot;Unlocked&quot;)==false or (tonumber(b:GetAttribute(&quot;CooldownRemaining&quot;)) or 0)&gt;0 then return false end
+	if type(firesignal)==&quot;function&quot; then
+		if type(getconnections)~=&quot;function&quot; then return true end
 		local ok,a=pcall(getconnections,b.Activated); local ok2,c=pcall(getconnections,b.MouseButton1Click)
 		if not ok or not ok2 or #a&gt;0 or #c&gt;0 or (handlerCount(b.MouseButton1Down) or 0)&gt;0 then return true end
 	end
 	return vim~=nil
 end
 local function fire(item)
-	if not ready(item) then return false,"Control unavailable or cooling down" end
+	if not ready(item) then return false,&quot;Control unavailable or cooling down&quot; end
 	if item.Action then
 		if item.Key then return pulseKey(item.Key) end
 		local camera=workspace.CurrentCamera
@@ -361,27 +361,27 @@ local function fire(item)
 			local ok=pcall(function() vim:SendMouseButtonEvent(x,y,0,true,game,0) end)
 			if ok then
 				local press={X=x,Y=y}; held[press]=true; task.delay(0.05,function() release(press) end)
-				API.LastInput="Bound attack requested: "..item.Action; return true
+				API.LastInput=&quot;Bound attack requested: &quot;..item.Action; return true
 			end
 		end
-		return false,"Bound action input unavailable"
+		return false,&quot;Bound action input unavailable&quot;
 	end
 	local button=item.Button
 	-- Use the binding actually displayed on AbilityIconN, not a guessed hotkey.
 	local key=item.Key or item.NativeKey
-    -- A virtual Q/E/etc can switch Roblox's preferred input to keyboard and hide TouchGui.
+    -- A virtual Q/E/etc can switch Roblox&#x27;s preferred input to keyboard and hide TouchGui.
     -- Use an actual mobile button touch for controls with bindings, including InputBegan-only handlers.
     if Input.TouchEnabled and key then return tapButton(button) end
 	if key and (item.Slot or item.NativeKey) then
-		local ok=pulseKey(key,math.clamp(tonumber(button:GetAttribute("InputHoldTime")) or 0.05,0.03,2))
+		local ok=pulseKey(key,math.clamp(tonumber(button:GetAttribute(&quot;InputHoldTime&quot;)) or 0.05,0.03,2))
 		if ok then return true end
 	end
-	if type(firesignal)=="function" then
+	if type(firesignal)==&quot;function&quot; then
 		local event=button.Activated
-		if type(getconnections)~="function" and vim then
+		if type(getconnections)~=&quot;function&quot; and vim then
 			local ok=tapButton(button); if ok then return true end
 		end
-		if type(getconnections)=="function" then
+		if type(getconnections)==&quot;function&quot; then
 			local ok,a=pcall(getconnections,event); local ok2,c=pcall(getconnections,button.MouseButton1Click)
 			if ok and ok2 then
 				if #a==0 and #c&gt;0 then event=button.MouseButton1Click
@@ -393,25 +393,25 @@ local function fire(item)
 						if ok then
 							local press={Signal=button.MouseButton1Up,X=x,Y=y}; held[press]=true
 							task.delay(0.06,function() release(press) end)
-							API.LastInput="Button press requested: "..button:GetFullName(); return true
+							API.LastInput=&quot;Button press requested: &quot;..button:GetFullName(); return true
 						end
 						API.LastInputError=tostring(err)
 					end
-					if item.Key then return pulseKey(item.Key,math.clamp(tonumber(button:GetAttribute("InputHoldTime")) or 0.05,0.03,2)) end
+					if item.Key then return pulseKey(item.Key,math.clamp(tonumber(button:GetAttribute(&quot;InputHoldTime&quot;)) or 0.05,0.03,2)) end
 					return tapButton(button)
 				end
 			end
 		end
-		local ok=pcall(firesignal,event); if ok then API.LastInput="Signal requested: "..button:GetFullName(); return true end
+		local ok=pcall(firesignal,event); if ok then API.LastInput=&quot;Signal requested: &quot;..button:GetFullName(); return true end
 	end
-	if item.Key then return pulseKey(item.Key,math.clamp(tonumber(button:GetAttribute("InputHoldTime")) or 0.05,0.03,2)) end
+	if item.Key then return pulseKey(item.Key,math.clamp(tonumber(button:GetAttribute(&quot;InputHoldTime&quot;)) or 0.05,0.03,2)) end
 	return tapButton(button)
 end
 local function skills()
 	local bySlot={}
 	local char=body(LocalPlayer)
-	local hero=normalize(char and (char:GetAttribute("MorphCurrent") or char:GetAttribute("power")))
-	local iron=hero=="ironman"
+	local hero=normalize(char and (char:GetAttribute(&quot;MorphCurrent&quot;) or char:GetAttribute(&quot;power&quot;)))
+	local iron=hero==&quot;ironman&quot;
 	for _,item in ipairs(controls) do
 		local slot=item.Slot
 		if iron and item.Words.repulsorblast then slot=1 end
@@ -429,7 +429,7 @@ local function walkTo(hum,goal)
 end
 local route,routeIndex,lastJump,routeTimer,pending,epoch={},1,nil,2,nil,0
 local function stopMotion()
-	if walker and walker.Parent then local root=walker.Parent:FindFirstChild("HumanoidRootPart"); if root then pcall(function() walker:MoveTo(root.Position) end) end end
+	if walker and walker.Parent then local root=walker.Parent:FindFirstChild(&quot;HumanoidRootPart&quot;); if root then pcall(function() walker:MoveTo(root.Position) end) end end
 	if walker then pcall(function() walker:Move(Vector3.new(),false) end) end
 	walker=nil; walkGoal=nil
 	if rotationHumanoid then pcall(function() rotationHumanoid.AutoRotate=oldAutoRotate end) end
@@ -501,9 +501,9 @@ local function aimPoint(targetRoot)
 	local item=combatBrain and ((elapsedTime&lt;combatBrain.NextAt and combatBrain.Cast) or combatBrain.AimSkill)
 	if item then
 		local b=item.Button
-		local speed=b and tonumber(b:GetAttribute("ProjectileSpeed"))
+		local speed=b and tonumber(b:GetAttribute(&quot;ProjectileSpeed&quot;))
 		local _,_,root=body(LocalPlayer)
-		if b and b:GetAttribute("Hitscan")==true then leadTime=0
+		if b and b:GetAttribute(&quot;Hitscan&quot;)==true then leadTime=0
 		elseif speed and speed&gt;0 and root then leadTime=math.clamp((targetRoot.Position-root.Position).Magnitude/speed,0,0.35) end
 	end
 	local lead=targetRoot.AssemblyLinearVelocity*leadTime
@@ -526,89 +526,89 @@ local function primary(point)
 	local item=find(attackNames)
 	if item then return fire(item) end
 	local char=body(LocalPlayer)
-	local tool=char and char:FindFirstChildOfClass("Tool")
+	local tool=char and char:FindFirstChildOfClass(&quot;Tool&quot;)
 	if tool then return pcall(function() tool:Activate() end) end
 	if vim and not Input.TouchEnabled and point then
 		local ok=pcall(function() vim:SendMouseButtonEvent(point.X,point.Y,0,true,game,0) end)
 		if ok then local press={X=point.X,Y=point.Y}; held[press]=true; task.delay(0.05,function() release(press) end); return true end
 	end
-	return false,"Attack control not detected"
+	return false,&quot;Attack control not detected&quot;
 end
 function API.Diagnostics()
 	local char,hum,root=body(LocalPlayer)
-	local report={"Rift Auto Play / "..API.Version,"Status: "..API.Status,"Last active status: "..tostring(API.LastActiveStatus or "not started"),
-		"Target: "..(API.Target and API.Target.Name or "none"),"Movement: "..tostring(combatBrain and combatBrain.Mode or "not ready"),
-		"Touch device: "..tostring(Input.TouchEnabled),"Virtual input service: "..tostring(vim~=nil),
-		"Character: "..(char and char:GetFullName() or "missing"),
-		"canRun: "..tostring(char and char:GetAttribute("canRun")),
-		"canAttack: "..tostring(char and char:GetAttribute("canAttack")),
-		"busy: "..tostring(char and char:GetAttribute("busy")),
-		"WalkSpeed: "..tostring(hum and hum.WalkSpeed),"Root anchored: "..tostring(root and root.Anchored),
-		"Last error: "..tostring(API.LastError or "none"),"Last input error: "..tostring(API.LastInputError or "none"),"Last input: "..tostring(API.LastInput or "none"),"Detected controls: "..#controls}
+	local report={&quot;Rift Auto Play / &quot;..API.Version,&quot;Status: &quot;..API.Status,&quot;Last active status: &quot;..tostring(API.LastActiveStatus or &quot;not started&quot;),
+		&quot;Target: &quot;..(API.Target and API.Target.Name or &quot;none&quot;),&quot;Movement: &quot;..tostring(combatBrain and combatBrain.Mode or &quot;not ready&quot;),
+		&quot;Touch device: &quot;..tostring(Input.TouchEnabled),&quot;Virtual input service: &quot;..tostring(vim~=nil),
+		&quot;Character: &quot;..(char and char:GetFullName() or &quot;missing&quot;),
+		&quot;canRun: &quot;..tostring(char and char:GetAttribute(&quot;canRun&quot;)),
+		&quot;canAttack: &quot;..tostring(char and char:GetAttribute(&quot;canAttack&quot;)),
+		&quot;busy: &quot;..tostring(char and char:GetAttribute(&quot;busy&quot;)),
+		&quot;WalkSpeed: &quot;..tostring(hum and hum.WalkSpeed),&quot;Root anchored: &quot;..tostring(root and root.Anchored),
+		&quot;Session: &quot;..tostring(API.Session and API.Session.Status or &quot;not ready&quot;),&quot;Last error: &quot;..tostring(API.LastError or &quot;none&quot;),&quot;Last input error: &quot;..tostring(API.LastInputError or &quot;none&quot;),&quot;Last input: &quot;..tostring(API.LastInput or &quot;none&quot;),&quot;Detected controls: &quot;..#controls}
     if API.Instinct then
         table.insert(report,API.Instinct.Diagnostics())
-        table.insert(report,"Ultra Instinct: "..API.Instinct.Status.." | reactions="..API.Instinct.Reactions.." | cue="..tostring(API.Instinct.LastCue).." | mode="..tostring(API.Instinct.LastMode).." | distance="..tostring(API.Instinct.LastDistance).." | tracked hitboxes="..tostring(API.Instinct.TrackedHitboxes))
+        table.insert(report,&quot;Ultra Instinct: &quot;..API.Instinct.Status..&quot; | reactions=&quot;..API.Instinct.Reactions..&quot; | cue=&quot;..tostring(API.Instinct.LastCue)..&quot; | mode=&quot;..tostring(API.Instinct.LastMode)..&quot; | distance=&quot;..tostring(API.Instinct.LastDistance)..&quot; | tracked hitboxes=&quot;..tostring(API.Instinct.TrackedHitboxes))
     end
     if API.Visuals then
-        table.insert(report,"Hero roles (current replicated fields):")
+        table.insert(report,&quot;Hero roles (current replicated fields):&quot;)
         for _,plr in ipairs(Players:GetPlayers()) do
             local hero,kind,_,source=API.Visuals.Resolve(plr)
             local model=body(plr)
-            table.insert(report,"@"..plr.Name.." | hero="..tostring(hero).." | confidence="..kind.." | source="..tostring(source)..
-                " | MorphCurrent="..tostring(model and model:GetAttribute("MorphCurrent")).." | power="..tostring(model and model:GetAttribute("power")))
+            table.insert(report,&quot;@&quot;..plr.Name..&quot; | hero=&quot;..tostring(hero)..&quot; | confidence=&quot;..kind..&quot; | source=&quot;..tostring(source)..
+                &quot; | MorphCurrent=&quot;..tostring(model and model:GetAttribute(&quot;MorphCurrent&quot;))..&quot; | power=&quot;..tostring(model and model:GetAttribute(&quot;power&quot;)))
         end
     end
 	for _,item in ipairs(controls) do
-		local words={}; for word in pairs(item.Words) do if word~="" then table.insert(words,word) end end; table.sort(words)
-		local handlers=""
+		local words={}; for word in pairs(item.Words) do if word~=&quot;&quot; then table.insert(words,word) end end; table.sort(words)
+		local handlers=&quot;&quot;
 		if item.Button then
-			handlers=" | Activated="..tostring(handlerCount(item.Button.Activated)).." Click="..tostring(handlerCount(item.Button.MouseButton1Click)).." Down="..tostring(handlerCount(item.Button.MouseButton1Down)).." InputBegan="..tostring(handlerCount(item.Button.InputBegan))
+			handlers=&quot; | Activated=&quot;..tostring(handlerCount(item.Button.Activated))..&quot; Click=&quot;..tostring(handlerCount(item.Button.MouseButton1Click))..&quot; Down=&quot;..tostring(handlerCount(item.Button.MouseButton1Down))..&quot; InputBegan=&quot;..tostring(handlerCount(item.Button.InputBegan))
 		end
-		table.insert(report,(item.Action and "Action: "..item.Action or item.Button:GetFullName()).." | slot="..tostring(item.Slot).." | key="..tostring(item.Key or item.NativeKey)..handlers.." | "..table.concat(words,", "))
+		table.insert(report,(item.Action and &quot;Action: &quot;..item.Action or item.Button:GetFullName())..&quot; | slot=&quot;..tostring(item.Slot)..&quot; | key=&quot;..tostring(item.Key or item.NativeKey)..handlers..&quot; | &quot;..table.concat(words,&quot;, &quot;))
 	end
-	table.insert(report,"Bound actions (including unfamiliar names):")
+	table.insert(report,&quot;Bound actions (including unfamiliar names):&quot;)
 	for name,info in pairs(boundActions) do
 		local bindings={}
-		if type(info)=="table" and type(info.inputTypes)=="table" then
+		if type(info)==&quot;table&quot; and type(info.inputTypes)==&quot;table&quot; then
 			for _,binding in ipairs(info.inputTypes) do table.insert(bindings,tostring(binding)) end
 		end
-		table.insert(report,tostring(name).." = "..table.concat(bindings,", "))
+		table.insert(report,tostring(name)..&quot; = &quot;..table.concat(bindings,&quot;, &quot;))
 	end
 	-- Include labels for HUDs that use frames/custom touch handlers rather than GuiButtons.
-	local pg=LocalPlayer:FindFirstChild("PlayerGui")
+	local pg=LocalPlayer:FindFirstChild(&quot;PlayerGui&quot;)
 	if pg then
-		table.insert(report,"Visible HUD labels / active frames:")
+		table.insert(report,&quot;Visible HUD labels / active frames:&quot;)
 		local count=0
 		for _,node in ipairs(pg:GetDescendants()) do
 			if not node:IsDescendantOf(gui) and visible(node) and
-				(node:IsA("TextLabel") and node.Text~="" or node:IsA("Frame") and node.Active) then
-				local text=node:IsA("TextLabel") and node.Text:sub(1,160) or "[active frame]"
-				table.insert(report,node:GetFullName().." = "..text); count+=1
-				if count&gt;=120 then table.insert(report,"[label limit reached]"); break end
+				(node:IsA(&quot;TextLabel&quot;) and node.Text~=&quot;&quot; or node:IsA(&quot;Frame&quot;) and node.Active) then
+				local text=node:IsA(&quot;TextLabel&quot;) and node.Text:sub(1,160) or &quot;[active frame]&quot;
+				table.insert(report,node:GetFullName()..&quot; = &quot;..text); count+=1
+				if count&gt;=120 then table.insert(report,&quot;[label limit reached]&quot;); break end
 			end
 		end
 	end
-	return table.concat(report,"\n")
+	return table.concat(report,&quot;\n&quot;)
 end
 function API.CopyDiagnostics()
 	scan()
 	local report=API.Diagnostics()
 	print(report)
-	local copied=type(setclipboard)=="function" and pcall(setclipboard,report)
+	local copied=type(setclipboard)==&quot;function&quot; and pcall(setclipboard,report)
 	return report,copied==true
 end
 function API.CopyDodgeReport()
-    local report="Rift Hub / Superhero Arena / "..API.Version.."\n"..API.Instinct.Diagnostics()
+    local report=&quot;Rift Hub / Superhero Arena / &quot;..API.Version..&quot;\n&quot;..API.Instinct.Diagnostics()
     print(report)
-    local copied=type(setclipboard)=="function" and pcall(setclipboard,report)
+    local copied=type(setclipboard)==&quot;function&quot; and pcall(setclipboard,report)
     return report,copied==true
 end
 function API.SetEnabled(value)
 	API.Enabled=alive and value==true; reset(); table.clear(unreachable)
 	targetPolicy.HoldUntil=0; targetPolicy.ReviewAt=0; targetPolicy.GroupSince=nil; targetPolicy.Previous=nil
 	if API.Enabled then scan() end
-	status(API.Enabled and "Looking for a target…" or "Off")
-	if playButton then playButton.Text=API.Enabled and "STOP" or "PLAY"; playButton.BackgroundColor3=API.Enabled and Color3.fromRGB(98,48,44) or Color3.fromRGB(72,91,68) end
+	status(API.Enabled and &quot;Looking for a target…&quot; or &quot;Off&quot;)
+	if playButton then playButton.Text=API.Enabled and &quot;STOP&quot; or &quot;PLAY&quot;; playButton.BackgroundColor3=API.Enabled and Color3.fromRGB(98,48,44) or Color3.fromRGB(72,91,68) end
 	if API.UI and API.UI.Step then API.UI.Step() end
 end
 -- Planning defaults are conservative fallbacks; explicit game metadata takes priority.
@@ -616,9 +616,9 @@ local brain={Index=1,Melee=0,SkillStreak=0,NextAt=0,StillUntil=0,DashAt=-math.hu
 	StableAim=0,MoveAt=0,MoveGoal=nil,LastHealth=nil,HitAt=-math.huge,
 	HeroKey=nil,Cast=nil,LastPosition=nil,Stuck=0,MoveInput=nil,Plans={},
 	Side=1,SideUntil=0,Spacing=5,GapRange=22,Threat=nil,DefenseGoal=nil,
-	Observations=setmetatable({},{__mode="k"}),Mode="spacing",ModeUntil=0,ModeGoal=nil,
+	Observations=setmetatable({},{__mode=&quot;k&quot;}),Mode=&quot;spacing&quot;,ModeUntil=0,ModeGoal=nil,
 	ModeCheckAt=0,FaceRoot=nil,FaceTravel=false,SuppressAttack=false,Chaser=nil,Steering=nil}
-local lastUsed=setmetatable({},{__mode="k"})
+local lastUsed=setmetatable({},{__mode=&quot;k&quot;})
 API.Brain=brain; combatBrain=brain
 local function roll(low,high) return low+(high-low)*math.random() end
 local function numberAttribute(button,name,fallback,low,high)
@@ -631,10 +631,10 @@ clearCombo=function()
 	brain.MoveAt=0; brain.MoveGoal=nil; brain.LastHealth=nil; brain.AimSkill=nil
 	if elapsedTime&gt;=brain.NextAt then brain.Cast=nil end
 	brain.LastPosition=nil; brain.Stuck=0; brain.HitAt=-math.huge
-	brain.Plans={}; brain.Threat=nil; brain.DefenseGoal=nil; brain.Observations=setmetatable({},{__mode="k"})
+	brain.Plans={}; brain.Threat=nil; brain.DefenseGoal=nil; brain.Observations=setmetatable({},{__mode=&quot;k&quot;})
 	brain.Side=math.random()&lt;0.5 and -1 or 1; brain.SideUntil=elapsedTime+roll(1.1,2.4)
 	brain.Spacing=roll(4.2,6.1); brain.GapRange=roll(20,24)
-	brain.Mode="spacing"; brain.ModeUntil=0; brain.ModeGoal=nil; brain.ModeCheckAt=elapsedTime+roll(0.8,1.4)
+	brain.Mode=&quot;spacing&quot;; brain.ModeUntil=0; brain.ModeGoal=nil; brain.ModeCheckAt=elapsedTime+roll(0.8,1.4)
 	brain.FaceRoot=nil; brain.FaceTravel=false; brain.SuppressAttack=false; brain.Chaser=nil; brain.ClosingPursuer=nil; brain.Steering=nil
 	if brain.MoveInput then pcall(function() brain.MoveInput:Move(Vector3.new(),false) end); brain.MoveInput=nil end
 	brain.DashDirection=nil
@@ -643,7 +643,7 @@ local function orderedSkills()
 	local list={}
 	for slot,item in pairs(skills()) do
 		if item then
-			table.insert(list,{Item=item,Slot=slot,Order=numberAttribute(item.Button,"ComboOrder",slot,1,100)})
+			table.insert(list,{Item=item,Slot=slot,Order=numberAttribute(item.Button,&quot;ComboOrder&quot;,slot,1,100)})
 		end
 	end
 	table.sort(list,function(a,b) if a.Order==b.Order then return a.Slot&lt;b.Slot end; return a.Order&lt;b.Order end)
@@ -651,17 +651,17 @@ local function orderedSkills()
 end
 local function skillRange(item)
 	local b=item.Button
-	local maximum=numberAttribute(b,"MaxRange",nil,2,250) or numberAttribute(b,"Range",nil,2,250)
+	local maximum=numberAttribute(b,&quot;MaxRange&quot;,nil,2,250) or numberAttribute(b,&quot;Range&quot;,nil,2,250)
 	-- Supplied Iron Man skills are ranged; other unclassified skills use a short planning radius.
 	maximum=maximum or ((item.Words.repulsorblast or item.Words.unibeam) and 60 or 22)
-	return numberAttribute(b,"MinRange",0,0,maximum),maximum
+	return numberAttribute(b,&quot;MinRange&quot;,0,0,maximum),maximum
 end
 local function skillPlan(item)
 	local id=item.Button or item.Action
 	local low,high=skillRange(item)
 	local plan=brain.Plans[id]
 	if not plan or plan.Low~=low or plan.High~=high then
-		-- Sample once per use, not every tick. Never extend the skill's hard range.
+		-- Sample once per use, not every tick. Never extend the skill&#x27;s hard range.
 		local trigger=low+(high-low)*roll(0.58,0.94)
 		plan={Low=low,High=high,Trigger=trigger,
 			Preferred=math.clamp(low+(trigger-low)*roll(0.32,0.60),math.min(4.2,trigger),trigger)}
@@ -674,7 +674,7 @@ local function skillReady(item,distance)
 	local plan=skillPlan(item)
 	if distance&lt;plan.Low or distance&gt;plan.Trigger then return false end
 	local last=lastUsed[item.Button or item.Action]
-	local retry=numberAttribute(item.Button,"CooldownDuration",1.5,0.25,90)
+	local retry=numberAttribute(item.Button,&quot;CooldownDuration&quot;,1.5,0.25,90)
 	return not last or elapsedTime-last&gt;=retry-1e-6
 end
 local function chooseSkill(distance)
@@ -721,7 +721,7 @@ groupTarget=function(root,current)
 				local distance=(other.Position-root.Position).Magnitude
 				if distance&lt;=32 and math.abs(other.Position.Y-root.Position.Y)&lt;10 and lineOfSight(root.Position,other.Position,char) then
 					table.insert(candidates,{Player=plr,Root=other,Health=hum.Health/math.max(hum.MaxHealth,1),
-						Distance=distance,Protected=char:GetAttribute("iframes")==true})
+						Distance=distance,Protected=char:GetAttribute(&quot;iframes&quot;)==true})
 				end
 			end
 		end
@@ -787,13 +787,13 @@ local function movementPattern(hum,root,targetRoot,targetChar,distance,clear)
 		else
 			if brain.Chaser then
 				brain.FaceTravel=elapsedTime&lt;brain.TurnAt; brain.FaceRoot=not brain.FaceTravel and brain.Chaser or nil
-				brain.Mode=brain.FaceTravel and "retreat turn" or "backpedal"
+				brain.Mode=brain.FaceTravel and &quot;retreat turn&quot; or &quot;backpedal&quot;
 				brain.SuppressAttack=brain.FaceTravel or brain.Chaser~=targetRoot
 			end
 			walkTo(hum,brain.ModeGoal); return true
 		end
 	end
-	brain.ModeGoal=nil; brain.FaceRoot=nil; brain.FaceTravel=false; brain.SuppressAttack=false; brain.Chaser=nil; brain.Mode="spacing"
+	brain.ModeGoal=nil; brain.FaceRoot=nil; brain.FaceTravel=false; brain.SuppressAttack=false; brain.Chaser=nil; brain.Mode=&quot;spacing&quot;
 	if elapsedTime&lt;brain.ModeCheckAt or not clear then return false end
 	brain.ModeCheckAt=elapsedTime+roll(0.8,1.4)
 	local chaser=brain.ClosingPursuer
@@ -806,13 +806,13 @@ local function movementPattern(hum,root,targetRoot,targetChar,distance,clear)
 	if chaser then
 		local away=Vector3.new(root.Position.X-chaser.Position.X,0,root.Position.Z-chaser.Position.Z).Unit
 		goal=root.Position+(away+Vector3.new(-away.Z,0,away.X)*0.25).Unit*roll(6,9)
-		mode="retreat turn"
+		mode=&quot;retreat turn&quot;
 	elseif count&gt;0 and distance&lt;=24 then
 		goal=targetRoot.Position-toward*desiredSpacing(hum,distance)+side*roll(3.5,5.5)+pressure*3
-		mode="flank"
+		mode=&quot;flank&quot;
 	elseif distance&gt;=6 and distance&lt;=26 and math.random()&lt;0.38 then
 		goal=root.Position+side*roll(4,6)+toward*(distance&gt;13 and roll(2,4) or 0)
-		mode="side run"
+		mode=&quot;side run&quot;
 	end
 	if goal and safeLocalMove(root,goal,targetChar) and floorSafe((root.Position+goal)*0.5) then
 		brain.Mode=mode; brain.ModeGoal=goal; brain.ModeUntil=elapsedTime+roll(0.8,1.25)
@@ -843,8 +843,8 @@ local function observeThreats(root)
 			local char,_,other=body(plr)
 			if other then
 				local delta=Vector3.new(root.Position.X-other.Position.X,0,root.Position.Z-other.Position.Z)
-				local swing=tonumber(char:GetAttribute("lastSwing"))
-				local attacking=attackStates[normalize(char:GetAttribute("state"))]==true
+				local swing=tonumber(char:GetAttribute(&quot;lastSwing&quot;))
+				local attacking=attackStates[normalize(char:GetAttribute(&quot;state&quot;))]==true
 				local previous=brain.Observations[plr]
 				brain.Observations[plr]={Swing=swing,Attacking=attacking}
 				local changed=previous and ((swing and previous.Swing and swing&gt;previous.Swing) or attacking and not previous.Attacking)
@@ -885,14 +885,14 @@ end
 local function nativeDash(hum,root,targetRoot,distance,clear)
 	if elapsedTime&lt;brain.DashRetry or elapsedTime&lt;brain.NextAt or elapsedTime&lt;brain.StillUntil then return false end
 	local char=body(LocalPlayer)
-	if char:GetAttribute("canDash")==false or char:GetAttribute("busy")==true or char:GetAttribute("canRun")==false then return false end
+	if char:GetAttribute(&quot;canDash&quot;)==false or char:GetAttribute(&quot;busy&quot;)==true or char:GetAttribute(&quot;canRun&quot;)==false then return false end
 	local item=find(dashNames)
 	if not item or not ready(item) then return false end
 	local threat=activeThreat()
 	local evading=threat~=nil or clear and elapsedTime-brain.HitAt&lt;0.65 and distance&lt;=16
 	local gap=clear and distance&gt;=brain.GapRange and distance&lt;=65 and not brain.Threat and not brain.ClosingPursuer and not brain.Chaser
 	if not gap and not evading then return false end
-	local cooldown=numberAttribute(item.Button,"CooldownDuration",2.5,0.4,30)
+	local cooldown=numberAttribute(item.Button,&quot;CooldownDuration&quot;,2.5,0.4,30)
 	if elapsedTime-brain.DashAt&lt;cooldown-1e-6 then return false end
 	local attackerRoot=threat and threat.Root or targetRoot
 	local delta=Vector3.new(attackerRoot.Position.X-root.Position.X,0,attackerRoot.Position.Z-root.Position.Z)
@@ -909,33 +909,33 @@ local function nativeDash(hum,root,targetRoot,distance,clear)
 	local ok=fire(item)
 	brain.DashRetry=elapsedTime+0.4
 	if not ok then if moved then hum:Move(Vector3.new(),false); brain.MoveInput=nil end; return false end
-	brain.DashAt=elapsedTime; brain.NextAt=elapsedTime+numberAttribute(item.Button,"RecoveryTime",0.3,0.1,2)
+	brain.DashAt=elapsedTime; brain.NextAt=elapsedTime+numberAttribute(item.Button,&quot;RecoveryTime&quot;,0.3,0.1,2)
 	brain.StillUntil=brain.NextAt; brain.MoveGoal=nil; brain.MoveAt=0
 	brain.GapRange=roll(20,26)
 	if evading then brain.Threat=nil; brain.DefenseGoal=nil end
-	status(evading and "Dodging" or "Closing distance")
+	status(evading and &quot;Dodging&quot; or &quot;Closing distance&quot;)
 	return true
 end
 local function defensiveDash(hum,root,direction)
-    if elapsedTime&lt;brain.DashRetry then return false,"Dash request retry delay" end
+    if elapsedTime&lt;brain.DashRetry then return false,&quot;Dash request retry delay&quot; end
     local char=body(LocalPlayer)
-    if not char or char:GetAttribute("LOCKED_INPUTS")==true or char:GetAttribute("cutsceneLock")==true or char:GetAttribute("canDash")==false or char:GetAttribute("busy")==true or char:GetAttribute("canRun")==false then return false,"Dash locked by game state" end
+    if not char or char:GetAttribute(&quot;LOCKED_INPUTS&quot;)==true or char:GetAttribute(&quot;cutsceneLock&quot;)==true or char:GetAttribute(&quot;canDash&quot;)==false or char:GetAttribute(&quot;busy&quot;)==true or char:GetAttribute(&quot;canRun&quot;)==false then return false,&quot;Dash locked by game state&quot; end
     local item=find(dashNames)
-    if not item then return false,"Dash control not detected" end
+    if not item then return false,&quot;Dash control not detected&quot; end
     local b=item.Button
-    if b and (b:GetAttribute("OnCooldown")==true or b:GetAttribute("Ready")==false or (tonumber(b:GetAttribute("CooldownRemaining")) or 0)&gt;0) then return false,"Dash cooldown active" end
-    local cooldown=numberAttribute(b,"CooldownDuration",2.5,0.4,30)
-    if elapsedTime-brain.DashAt&lt;cooldown-1e-6 then return false,"Dash cooldown active (request timing)" end
-    if not ready(item) then return false,"Dash control unavailable" end
+    if b and (b:GetAttribute(&quot;OnCooldown&quot;)==true or b:GetAttribute(&quot;Ready&quot;)==false or (tonumber(b:GetAttribute(&quot;CooldownRemaining&quot;)) or 0)&gt;0) then return false,&quot;Dash cooldown active&quot; end
+    local cooldown=numberAttribute(b,&quot;CooldownDuration&quot;,2.5,0.4,30)
+    if elapsedTime-brain.DashAt&lt;cooldown-1e-6 then return false,&quot;Dash cooldown active (request timing)&quot; end
+    if not ready(item) then return false,&quot;Dash control unavailable&quot; end
     -- Check the native dash direction; actual travel distance is controlled by the game.
     for _,length in ipairs({3,6,9}) do
-        if not safeLocalMove(root,root.Position+direction*length,nil) then return false,"Native dash path obstructed" end
+        if not safeLocalMove(root,root.Position+direction*length,nil) then return false,&quot;Native dash path obstructed&quot; end
     end
     local ok,reason=fire(item);brain.DashRetry=elapsedTime+0.4
-    if not ok then return false,reason or "Dash input rejected" end
-    brain.DashAt=elapsedTime;brain.NextAt=math.max(brain.NextAt,elapsedTime+numberAttribute(b,"RecoveryTime",0.3,0.1,2))
+    if not ok then return false,reason or &quot;Dash input rejected&quot; end
+    brain.DashAt=elapsedTime;brain.NextAt=math.max(brain.NextAt,elapsedTime+numberAttribute(b,&quot;RecoveryTime&quot;,0.3,0.1,2))
     brain.StillUntil=math.max(brain.StillUntil,brain.NextAt)
-    return true,"Native dash input requested (acceptance unverified)"
+    return true,&quot;Native dash input requested (acceptance unverified)&quot;
 end
 local function trackMovement(hum,root,distance,dt)
 	local progress=brain.LastPosition and (root.Position-brain.LastPosition).Magnitude or 1
@@ -946,9 +946,9 @@ local function trackMovement(hum,root,distance,dt)
 	brain.LastPosition=root.Position
 	if brain.Stuck&gt;1.2 then
 		routeTimer=math.max(routeTimer,1.2); brain.ModeUntil=0; brain.ModeCheckAt=elapsedTime+1
-		brain.ModeGoal=nil; brain.FaceRoot=nil; brain.FaceTravel=false; brain.SuppressAttack=false; brain.Chaser=nil; brain.Mode="path"
+		brain.ModeGoal=nil; brain.FaceRoot=nil; brain.FaceTravel=false; brain.SuppressAttack=false; brain.Chaser=nil; brain.Mode=&quot;path&quot;
 	end
-	if brain.Stuck&gt;3 then unreachable[API.Target]=elapsedTime+4; reset(); status("Finding another route") end
+	if brain.Stuck&gt;3 then unreachable[API.Target]=elapsedTime+4; reset(); status(&quot;Finding another route&quot;) end
 end
 local function tacticalMove(hum,root,targetRoot,targetChar,distance,clear,dt)
 	if elapsedTime&lt;brain.StillUntil then if not brain.MoveInput then haltWalking(hum,root) end; return end
@@ -991,64 +991,65 @@ local function tacticalMove(hum,root,targetRoot,targetChar,distance,clear,dt)
 	trackMovement(hum,root,distance,dt)
 end
 local function combo(hum,root,distance,screen)
-	if elapsedTime&lt;brain.NextAt then status(brain.Cast and "Finishing skill" or "Recovering"); return end
-	if brain.SuppressAttack then status("Turning to check pursuer"); return end
+	if elapsedTime&lt;brain.NextAt then status(brain.Cast and &quot;Finishing skill&quot; or &quot;Recovering&quot;); return end
+	if brain.SuppressAttack then status(&quot;Turning to check pursuer&quot;); return end
 	local char=body(LocalPlayer)
-	if (char:GetAttribute("busy")==true or char:GetAttribute("canAttack")==false) and char:GetAttribute("CancelWindow")~=true then status("Waiting for attack recovery"); return end
+	if (char:GetAttribute(&quot;busy&quot;)==true or char:GetAttribute(&quot;canAttack&quot;)==false) and char:GetAttribute(&quot;CancelWindow&quot;)~=true then status(&quot;Waiting for attack recovery&quot;); return end
 	local targetChar=body(API.Target)
-	if targetChar and targetChar:GetAttribute("iframes")==true then status("Waiting for target vulnerability"); return end
+	if targetChar and targetChar:GetAttribute(&quot;iframes&quot;)==true then status(&quot;Waiting for target vulnerability&quot;); return end
 	local item,index,count=chooseSkill(distance)
 	local basic=find(attackNames)
-	local chainLength=basic and numberAttribute(basic.Button,"ComboLength",3,1,5) or 3
-	local canLink=brain.Melee==0 or brain.Melee&gt;=chainLength or distance&gt;8 or char:GetAttribute("CancelWindow")==true
+	local chainLength=basic and numberAttribute(basic.Button,&quot;ComboLength&quot;,3,1,5) or 3
+	local canLink=brain.Melee==0 or brain.Melee&gt;=chainLength or distance&gt;8 or char:GetAttribute(&quot;CancelWindow&quot;)==true
 	-- Several ready skills must not starve punches forever at close range.
-	if basic and distance&lt;=8 and brain.SkillStreak&gt;=2 and char:GetAttribute("CancelWindow")~=true then canLink=false end
+	if basic and distance&lt;=8 and brain.SkillStreak&gt;=2 and char:GetAttribute(&quot;CancelWindow&quot;)~=true then canLink=false end
 	if item and canLink and brain.StableAim&gt;=0.08 then
 		local ok,err=fire(item)
 		if ok then
 			local b=item.Button
-			local cast=numberAttribute(b,"CastTime",0.18,0.03,8)
-			local channel=numberAttribute(b,"ChannelTime",0,0,15)
-			local recovery=numberAttribute(b,"RecoveryTime",0.22,0.04,4)
+			local cast=numberAttribute(b,&quot;CastTime&quot;,0.18,0.03,8)
+			local channel=numberAttribute(b,&quot;ChannelTime&quot;,0,0,15)
+			local recovery=numberAttribute(b,&quot;RecoveryTime&quot;,0.22,0.04,4)
 			local id=b or item.Action
 			local plan=skillPlan(item)
 			API.LastCast={Distance=distance,Trigger=plan.Trigger,Low=plan.Low,High=plan.High}
 			lastUsed[id]=elapsedTime; brain.Plans[id]=nil
 			brain.NextAt=elapsedTime+cast+channel+recovery+roll(0,0.06)
-			brain.StillUntil=(b and b:GetAttribute("StopToCast")==true or channel&gt;0) and elapsedTime+cast+channel or 0
+			brain.StillUntil=(b and b:GetAttribute(&quot;StopToCast&quot;)==true or channel&gt;0) and elapsedTime+cast+channel or 0
 			brain.Cast=item; brain.Index=index%count+1; brain.Melee=0; brain.SkillStreak+=1
 			if brain.StillUntil&gt;elapsedTime then brain.Stuck=0; brain.LastPosition=root.Position; haltWalking(hum,root) end
-			status("Skill requested"); return
+			status(&quot;Skill requested&quot;); return
 		else brain.NextAt=elapsedTime+0.3; status(err); return end
 	end
 	brain.Cast=nil
 	if distance&lt;=8 then
 		local ok,err=primary(screen)
-		if not ok then brain.NextAt=elapsedTime+0.5; status(err or "Attack input unavailable"); return end
+		if not ok then brain.NextAt=elapsedTime+0.5; status(err or &quot;Attack input unavailable&quot;); return end
 		brain.Melee+=1
 		local basic=find(attackNames)
-		local length=basic and numberAttribute(basic.Button,"ComboLength",3,1,5) or 3
-		local spacing=basic and numberAttribute(basic.Button,"AttackInterval",0.36,0.15,2) or 0.36
+		local length=basic and numberAttribute(basic.Button,&quot;ComboLength&quot;,3,1,5) or 3
+		local fallback=Config.FastAttack and Config.AttackDelay or 0.36
+		local spacing=basic and numberAttribute(basic.Button,&quot;AttackInterval&quot;,fallback,0.15,2) or fallback
 		brain.NextAt=elapsedTime+(brain.Melee&gt;=length and math.max(0.5,spacing) or spacing)+roll(0,0.035)
 		if brain.Melee&gt;=length then brain.Melee=0; brain.SkillStreak=0; brain.Spacing=roll(4.2,6.1) end
-		status("Melee combo")
+		status(&quot;Melee combo&quot;)
 	else
-		if not basic and #orderedSkills()==0 then status("No attack/skill buttons detected")
-		else status("Positioning for next ability") end
+		if not basic and #orderedSkills()==0 then status(&quot;No attack/skill buttons detected&quot;)
+		else status(&quot;Positioning for next ability&quot;) end
 	end
 end
 
 function API.Step(dt)
 	dt=math.clamp(tonumber(dt) or 0,0,0.1); accumulator+=dt
 	if accumulator&lt;0.1 then return end; local elapsed=accumulator; accumulator=0; elapsedTime+=elapsed
-	if API.Instinct and API.Instinct.Dodging then if API.Enabled then status("Ultra Instinct: evading") end; return end
-	if not live() then reset(); if API.Enabled then status(dragging and "Paused while moving panel" or manualMovement() and "Paused for your movement" or "Paused") end; return end
+	if API.Instinct and API.Instinct.Dodging then if API.Enabled then status(&quot;Ultra Instinct: evading&quot;) end; return end
+	if not live() then reset(); if API.Enabled then status(dragging and &quot;Paused while moving panel&quot; or manualMovement() and &quot;Paused for your movement&quot; or &quot;Paused&quot;) end; return end
 	local char,hum,root=body(LocalPlayer)
-	if not root or root.Anchored or hum.PlatformStand then reset(); status("Waiting for your character…"); return end
-	if char:GetAttribute("MorphAppearanceReady")==false then reset(); status("Waiting for hero"); return end
+	if not root or root.Anchored or hum.PlatformStand then reset(); status(&quot;Waiting for your character…&quot;); return end
+	if char:GetAttribute(&quot;MorphAppearanceReady&quot;)==false then reset(); status(&quot;Waiting for hero&quot;); return end
 	controlAge+=elapsed; if controlAge&gt;=0.75 then scan() end
 	local camera=workspace.CurrentCamera
-	if not camera or camera.CameraType==Enum.CameraType.Scriptable or char:GetAttribute("cutsceneLock")==true or char:GetAttribute("inArena")==false then reset(); status("Waiting for the arena"); return end
+	if not camera or camera.CameraType==Enum.CameraType.Scriptable or char:GetAttribute(&quot;cutsceneLock&quot;)==true or char:GetAttribute(&quot;inArena&quot;)==false then reset(); status(&quot;Waiting for the arena&quot;); return end
 	local target=selectTarget(root)
 	if target~=API.Target then
 		local old=API.Target; reset(); API.Target=target
@@ -1057,10 +1058,10 @@ function API.Step(dt)
 		if not old then targetPolicy.GroupSince=nil end
 	end
 	local targetChar,_,targetRoot=body(target)
-	if not targetRoot then stopMotion(); status("Looking for a target…"); return end
+	if not targetRoot then stopMotion(); status(&quot;Looking for a target…&quot;); return end
 	if sessionRoot~=root or sessionTargetRoot~=targetRoot then reset(); API.Target=target; sessionRoot=root; sessionTargetRoot=targetRoot end
-	local heroKey=normalize(char:GetAttribute("MorphCurrent") or char:GetAttribute("power"))
-	if brain.HeroKey~=heroKey then brain.HeroKey=heroKey; lastUsed=setmetatable({},{__mode="k"}); brain.Plans={}; brain.Index=1; brain.Melee=0; brain.SkillStreak=0; brain.NextAt=elapsedTime+0.25; scan() end
+	local heroKey=normalize(char:GetAttribute(&quot;MorphCurrent&quot;) or char:GetAttribute(&quot;power&quot;))
+	if brain.HeroKey~=heroKey then brain.HeroKey=heroKey; lastUsed=setmetatable({},{__mode=&quot;k&quot;}); brain.Plans={}; brain.Index=1; brain.Melee=0; brain.SkillStreak=0; brain.NextAt=elapsedTime+0.25; scan() end
 	if rotationHumanoid~=hum then stopMotion(); rotationHumanoid=hum; oldAutoRotate=hum.AutoRotate end
 	hum.AutoRotate=false
 	if brain.LastHealth and hum.Health&lt;brain.LastHealth then brain.HitAt=elapsedTime end
@@ -1069,15 +1070,15 @@ function API.Step(dt)
 	brain.ClosingPursuer=pursuer(root,targetRoot)
 	local distance=(targetRoot.Position-root.Position).Magnitude
 	local clear=lineOfSight(root.Position,targetRoot.Position,targetChar)
-	if char:GetAttribute("canRun")==false then haltWalking(hum,root)
+	if char:GetAttribute(&quot;canRun&quot;)==false then haltWalking(hum,root)
 	else
 		if nativeDash(hum,root,targetRoot,distance,clear) then return end
 		tacticalMove(hum,root,targetRoot,targetChar,distance,clear,elapsed)
 		if API.Target~=target then return end
 	end
-	if char:GetAttribute("canRun")==false and distance&gt;8 then status("Game has movement locked (canRun=false)"); return end
+	if char:GetAttribute(&quot;canRun&quot;)==false and distance&gt;8 then status(&quot;Game has movement locked (canRun=false)&quot;); return end
     if API.Instinct and API.Instinct.ThreatPending then
-        brain.StableAim=0;status("Defense priority: holding new attacks");return
+        brain.StableAim=0;status(&quot;Defense priority: holding new attacks&quot;);return
     end
 	local item=chooseSkill(distance); brain.AimSkill=item
 	local point=aimPoint(targetRoot)
@@ -1086,7 +1087,7 @@ function API.Step(dt)
 	local aligned=vector.Magnitude&gt;0.1 and camera.CFrame.LookVector:Dot(vector.Unit)&gt;=0.992
 	local flat=Vector3.new(targetRoot.Position.X-root.Position.X,0,targetRoot.Position.Z-root.Position.Z)
 	local facing=flat.Magnitude&lt;=0.1 or root.CFrame.LookVector:Dot(flat.Unit)&gt;=0.90
-	if not clear or not onScreen or screen.Z&lt;=0 or not aligned or not facing or not lineOfSight(camera.CFrame.Position,targetRoot.Position,targetChar) then brain.StableAim=0; status("Approaching @"..target.Name); return end
+	if not clear or not onScreen or screen.Z&lt;=0 or not aligned or not facing or not lineOfSight(camera.CFrame.Position,targetRoot.Position,targetChar) then brain.StableAim=0; status(&quot;Approaching @&quot;..target.Name); return end
 	brain.StableAim+=elapsed
 	combo(hum,root,distance,screen)
 end
@@ -1121,8 +1122,8 @@ local function guarded(fn,...)
 	API.LastError=tostring(err)
     Config.UltraInstinct=false;if API.Instinct then pcall(API.Instinct.Stop) end
 	pcall(API.SetEnabled,false); pcall(restoreControls); pcall(releaseAll)
-	status("Stopped: "..API.LastError:match("[^\n]+"))
-	warn("[Rift Auto Play] "..API.LastError)
+	status(&quot;Stopped: &quot;..API.LastError:match(&quot;[^\n]+&quot;))
+	warn(&quot;[Rift Auto Play] &quot;..API.LastError)
 end
 local step=API.Step
 local visualAge=0
@@ -1134,7 +1135,8 @@ function API.Step(dt)
         API.Instinct.Step(dt)
         visualAge+=dt
         if visualAge&gt;=0.15 then API.Visuals.Step(visualAge);API.UI.Step();visualAge=0 end
-        step(dt)
+        if API.Session then API.Session.Step(dt) end
+        if not API.Session or not API.Session.Retreating then step(dt) end
     end)
 end
 function API.Unload()
@@ -1142,10 +1144,11 @@ function API.Unload()
 	Config.UltraInstinct=false
     if API.Instinct then API.Instinct.Destroy() end
     API.SetEnabled(false); alive=false
+    if API.Session then API.Session.Destroy() end
     if API.Visuals then API.Visuals.Destroy() end
     if API.UI then API.UI.Destroy() end
     for _,clean in ipairs(featureCleanup) do pcall(clean) end;table.clear(featureCleanup)
-	Run:UnbindFromRenderStep("RiftAutoPlayAim")
+	Run:UnbindFromRenderStep(&quot;RiftAutoPlayAim&quot;)
 	for _,c in ipairs(connections) do c:Disconnect() end; table.clear(connections)
 	gui:Destroy()
 	if env.SuperheroArenaHub==API then env.SuperheroArenaHub=nil end
@@ -1153,52 +1156,52 @@ end
 local MakeVisuals=(function()
 -- Only hero-colored chams, a role label, and the exact username are drawn.
 return function(ctx)
-    local Players=game:GetService("Players")
+    local Players=game:GetService(&quot;Players&quot;)
     local LocalPlayer=Players.LocalPlayer
     local M={Rows={}}
     local cfg=ctx.Config
     local elapsed,menuAge=0,2
     local learned={}
-    local function norm(s) return type(s)=="string" and s:lower():gsub("[^%w]","") or "" end
+    local function norm(s) return type(s)==&quot;string&quot; and s:lower():gsub(&quot;[^%w]&quot;,&quot;&quot;) or &quot;&quot; end
     local colors={
-	["Iron Man"] = Color3.fromRGB(220, 65, 48), ["Hulk"] = Color3.fromRGB(78, 214, 112),
-	["Aquaman"] = Color3.fromRGB(48, 180, 173), ["Spiderman"] = Color3.fromRGB(230, 57, 65),
-	["Frozone"] = Color3.fromRGB(130, 216, 255), ["Captain America"] = Color3.fromRGB(91, 146, 244),
-	["Flash"] = Color3.fromRGB(240, 75, 65), ["Storm"] = Color3.fromRGB(233, 232, 248),
-	["Magneto"] = Color3.fromRGB(194, 83, 224), ["Ghost Rider"] = Color3.fromRGB(255, 136, 53),
-	["Thor"] = Color3.fromRGB(107, 180, 248), ["Doctor Strange"] = Color3.fromRGB(240, 183, 80),
-	["Raven"] = Color3.fromRGB(159, 100, 232), ["Groot"] = Color3.fromRGB(177, 141, 93),
-	["Wolverine"] = Color3.fromRGB(245, 211, 63), ["Superman"] = Color3.fromRGB(79, 139, 237),
-	["Red Hulk"] = Color3.fromRGB(242, 72, 65), ["Billy Butcher"] = Color3.fromRGB(172, 175, 184),
-	["War Machine"] = Color3.fromRGB(164, 181, 195), ["Deadpool"] = Color3.fromRGB(213, 61, 77),
-	["Batman"] = Color3.fromRGB(164, 174, 195), ["Thanos"] = Color3.fromRGB(173, 116, 230),
-	["Loki"] = Color3.fromRGB(157, 203, 85), ["Venom"] = Color3.fromRGB(182, 181, 204),
-	["Galactic Thanos"] = "RAINBOW",
+	[&quot;Iron Man&quot;] = Color3.fromRGB(220, 65, 48), [&quot;Hulk&quot;] = Color3.fromRGB(78, 214, 112),
+	[&quot;Aquaman&quot;] = Color3.fromRGB(48, 180, 173), [&quot;Spiderman&quot;] = Color3.fromRGB(230, 57, 65),
+	[&quot;Frozone&quot;] = Color3.fromRGB(130, 216, 255), [&quot;Captain America&quot;] = Color3.fromRGB(91, 146, 244),
+	[&quot;Flash&quot;] = Color3.fromRGB(240, 75, 65), [&quot;Storm&quot;] = Color3.fromRGB(233, 232, 248),
+	[&quot;Magneto&quot;] = Color3.fromRGB(194, 83, 224), [&quot;Ghost Rider&quot;] = Color3.fromRGB(255, 136, 53),
+	[&quot;Thor&quot;] = Color3.fromRGB(107, 180, 248), [&quot;Doctor Strange&quot;] = Color3.fromRGB(240, 183, 80),
+	[&quot;Raven&quot;] = Color3.fromRGB(159, 100, 232), [&quot;Groot&quot;] = Color3.fromRGB(177, 141, 93),
+	[&quot;Wolverine&quot;] = Color3.fromRGB(245, 211, 63), [&quot;Superman&quot;] = Color3.fromRGB(79, 139, 237),
+	[&quot;Red Hulk&quot;] = Color3.fromRGB(242, 72, 65), [&quot;Billy Butcher&quot;] = Color3.fromRGB(172, 175, 184),
+	[&quot;War Machine&quot;] = Color3.fromRGB(164, 181, 195), [&quot;Deadpool&quot;] = Color3.fromRGB(213, 61, 77),
+	[&quot;Batman&quot;] = Color3.fromRGB(164, 174, 195), [&quot;Thanos&quot;] = Color3.fromRGB(173, 116, 230),
+	[&quot;Loki&quot;] = Color3.fromRGB(157, 203, 85), [&quot;Venom&quot;] = Color3.fromRGB(182, 181, 204),
+	[&quot;Galactic Thanos&quot;] = &quot;RAINBOW&quot;,
 }
     local known={}
     for name in pairs(colors) do known[norm(name)]=name end
-    local aliases={water="Aquaman",earth="Hulk",knight="Thor",samurai="Deadpool",nature="Groot",drstrange="Doctor Strange",theflash="Flash",spiderman="Spiderman"}
+    local aliases={water=&quot;Aquaman&quot;,earth=&quot;Hulk&quot;,knight=&quot;Thor&quot;,samurai=&quot;Deadpool&quot;,nature=&quot;Groot&quot;,drstrange=&quot;Doctor Strange&quot;,theflash=&quot;Flash&quot;,spiderman=&quot;Spiderman&quot;}
     for key,name in pairs(aliases) do known[key]=name end
-    local estimates={fire="Ghost Rider",ice="Frozone",wind="Storm",tech="Iron Man",technology="Iron Man",armor="Iron Man",spider="Spiderman",web="Spiderman",
-        shield="Captain America",speed="Flash",metal="Magneto",lightning="Thor",thunder="Thor",magic="Doctor Strange",sorcery="Doctor Strange",darkness="Raven",
-        claws="Wolverine",redearth="Red Hulk",butcher="Billy Butcher",arsenal="War Machine",shadow="Batman",cosmic="Thanos",illusion="Loki",symbiote="Venom",galactic="Galactic Thanos"}
+    local estimates={fire=&quot;Ghost Rider&quot;,ice=&quot;Frozone&quot;,wind=&quot;Storm&quot;,tech=&quot;Iron Man&quot;,technology=&quot;Iron Man&quot;,armor=&quot;Iron Man&quot;,spider=&quot;Spiderman&quot;,web=&quot;Spiderman&quot;,
+        shield=&quot;Captain America&quot;,speed=&quot;Flash&quot;,metal=&quot;Magneto&quot;,lightning=&quot;Thor&quot;,thunder=&quot;Thor&quot;,magic=&quot;Doctor Strange&quot;,sorcery=&quot;Doctor Strange&quot;,darkness=&quot;Raven&quot;,
+        claws=&quot;Wolverine&quot;,redearth=&quot;Red Hulk&quot;,butcher=&quot;Billy Butcher&quot;,arsenal=&quot;War Machine&quot;,shadow=&quot;Batman&quot;,cosmic=&quot;Thanos&quot;,illusion=&quot;Loki&quot;,symbiote=&quot;Venom&quot;,galactic=&quot;Galactic Thanos&quot;}
     local function valid(raw)
-        return type(raw)=="string" and raw~="" and #raw&lt;=64 and not raw:find("%c") and not tonumber(raw)
+        return type(raw)==&quot;string&quot; and raw~=&quot;&quot; and #raw&lt;=64 and not raw:find(&quot;%c&quot;) and not tonumber(raw)
             and not ({unknown=true,none=true,default=true,loading=true,unselected=true})[norm(raw)]
     end
     function M.LearnMenu()
         table.clear(learned)
-        local pg=LocalPlayer:FindFirstChild("PlayerGui");if not pg then return end
+        local pg=LocalPlayer:FindFirstChild(&quot;PlayerGui&quot;);if not pg then return end
         local scopes,conflicts={},{ }
         local count=0
         for _,node in ipairs(pg:GetDescendants()) do
             count+=1;if count&gt;4000 then break end
-            if not node:IsDescendantOf(ctx.Gui) and (node:IsA("TextLabel") or node:IsA("TextButton")) then
+            if not node:IsDescendantOf(ctx.Gui) and (node:IsA(&quot;TextLabel&quot;) or node:IsA(&quot;TextButton&quot;)) then
                 local hero=known[norm(node.Text)]
                 if hero then
                     local parent=node.Parent
                     for _=1,2 do
-                        if not parent or parent:IsA("ScreenGui") then break end
+                        if not parent or parent:IsA(&quot;ScreenGui&quot;) then break end
                         scopes[parent]=scopes[parent] or {};scopes[parent][hero]=true;parent=parent.Parent
                     end
                 end
@@ -1208,7 +1211,7 @@ return function(ctx)
             local name,total=nil,0;for hero in pairs(names) do name=hero;total+=1 end
             if total==1 then
                 local values=scope:GetAttributes()
-                for _,child in ipairs(scope:GetChildren()) do if child:IsA("StringValue") then values[child.Name]=child.Value end end
+                for _,child in ipairs(scope:GetChildren()) do if child:IsA(&quot;StringValue&quot;) then values[child.Name]=child.Value end end
                 for key,value in pairs(values) do
                     if ({morphcurrent=true,morphid=true,power=true,powerid=true,heroid=true,characterid=true,internalname=true})[norm(key)] and valid(value) and not known[norm(value)] then
                         local id=norm(value)
@@ -1224,20 +1227,20 @@ return function(ctx)
         local raw,source
         for _,node in ipairs({char or false,plr}) do
             if node then
-                for _,key in ipairs({"MorphCurrent","power","Hero","HeroName","CharacterName","SelectedHero","Role"}) do
+                for _,key in ipairs({&quot;MorphCurrent&quot;,&quot;power&quot;,&quot;Hero&quot;,&quot;HeroName&quot;,&quot;CharacterName&quot;,&quot;SelectedHero&quot;,&quot;Role&quot;}) do
                     local value=node:GetAttribute(key)
-                    if not valid(value) then local child=node:FindFirstChild(key);value=child and child:IsA("StringValue") and child.Value end
-                    if valid(value) then raw=value;source=node.Name.."."..key;break end
+                    if not valid(value) then local child=node:FindFirstChild(key);value=child and child:IsA(&quot;StringValue&quot;) and child.Value end
+                    if valid(value) then raw=value;source=node.Name..&quot;.&quot;..key;break end
                 end
             end
             if raw then break end
         end
         local key=norm(raw);local hero=known[key] or learned[key]
-        local kind=hero and "confirmed" or "unmapped"
-        if not hero and cfg.GuessRoles and estimates[key] then hero=estimates[key];kind="estimate" end
+        local kind=hero and &quot;confirmed&quot; or &quot;unmapped&quot;
+        if not hero and cfg.GuessRoles and estimates[key] then hero=estimates[key];kind=&quot;estimate&quot; end
         hero=hero or raw
         local color=colors[hero] or Color3.fromRGB(178,161,255)
-        if color=="RAINBOW" then color=Color3.fromHSV((elapsed*0.15)%1,0.78,1) end
+        if color==&quot;RAINBOW&quot; then color=Color3.fromHSV((elapsed*0.15)%1,0.78,1) end
         return hero,kind,color,source
     end
     local function make(class,props,parent)
@@ -1257,18 +1260,18 @@ return function(ctx)
                 if row and (row.Character~=char or not char) then remove(plr);row=nil end
                 if char and cfg.ESP then
                     if not row then
-                        local h=make("Highlight",{Name="RiftSHA_Highlight",Adornee=char,DepthMode=Enum.HighlightDepthMode.AlwaysOnTop,OutlineTransparency=0.05},char)
-                        local tag=make("BillboardGui",{Name="RiftSHA_Tag",Size=UDim2.fromOffset(230,44),StudsOffsetWorldSpace=Vector3.new(0,2,0),AlwaysOnTop=true,MaxDistance=2000},char)
+                        local h=make(&quot;Highlight&quot;,{Name=&quot;RiftSHA_Highlight&quot;,Adornee=char,DepthMode=Enum.HighlightDepthMode.AlwaysOnTop,OutlineTransparency=0.05},char)
+                        local tag=make(&quot;BillboardGui&quot;,{Name=&quot;RiftSHA_Tag&quot;,Size=UDim2.fromOffset(230,44),StudsOffsetWorldSpace=Vector3.new(0,2,0),AlwaysOnTop=true,MaxDistance=2000},char)
                         local function label(name,y,size)
-                            return make("TextLabel",{Name=name,Position=UDim2.fromOffset(0,y),Size=UDim2.new(1,0,0,20),BackgroundTransparency=1,Font=Enum.Font.GothamBold,TextSize=size,TextStrokeTransparency=0.3},tag)
+                            return make(&quot;TextLabel&quot;,{Name=name,Position=UDim2.fromOffset(0,y),Size=UDim2.new(1,0,0,20),BackgroundTransparency=1,Font=Enum.Font.GothamBold,TextSize=size,TextStrokeTransparency=0.3},tag)
                         end
-                        row={Character=char,Highlight=h,Tag=tag,Role=label("Role",0,13),Username=label("Username",22,12)};M.Rows[plr]=row
+                        row={Character=char,Highlight=h,Tag=tag,Role=label(&quot;Role&quot;,0,13),Username=label(&quot;Username&quot;,22,12)};M.Rows[plr]=row
                     end
                     local hero,kind,color=M.Resolve(plr)
                     row.Highlight.Enabled=cfg.Chams;row.Highlight.FillColor=color;row.Highlight.OutlineColor=color;row.Highlight.FillTransparency=1-cfg.ChamOpacity
-                    row.Tag.Enabled=cfg.Names or cfg.Roles;row.Tag.Adornee=char:FindFirstChild("Head") or root
-                    row.Role.Visible=cfg.Roles;row.Role.Text=(hero or "Role unavailable")..(kind=="estimate" and " · estimate" or hero and kind=="unmapped" and " · unmapped" or "");row.Role.TextColor3=color
-                    row.Username.Visible=cfg.Names;row.Username.Text="@"..plr.Name;row.Username.TextColor3=Color3.fromRGB(240,240,246)
+                    row.Tag.Enabled=cfg.Names or cfg.Roles;row.Tag.Adornee=char:FindFirstChild(&quot;Head&quot;) or root
+                    row.Role.Visible=cfg.Roles;row.Role.Text=(hero or &quot;Role unavailable&quot;)..(kind==&quot;estimate&quot; and &quot; · estimate&quot; or hero and kind==&quot;unmapped&quot; and &quot; · unmapped&quot; or &quot;&quot;);row.Role.TextColor3=color
+                    row.Username.Visible=cfg.Names;row.Username.Text=&quot;@&quot;..plr.Name;row.Username.TextColor3=Color3.fromRGB(240,240,246)
                 elseif row then remove(plr) end
             end
         end
@@ -1278,12 +1281,13 @@ return function(ctx)
     function M.Destroy() local players={};for plr in pairs(M.Rows) do table.insert(players,plr) end;for _,plr in ipairs(players) do remove(plr) end end
     return M
 end
+
 end)()
 local MakeInstinct=(function()
 -- Detected-attack escapes: one local teleport by default, with an optional walking/native mode.
 return function(ctx)
-    local Players=game:GetService("Players")
-    local M={Status="Off",Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,Teleports=0,SpeedBursts=0,LastSpeedResult="No burst",BurstRejected=false,ThreatPending=false,LocalBlockReason="None",LastAutoDash="Not attempted",LastTestDash="Not attempted",LastDash="Not requested",LastDecision="No automatic cue processed",LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock="None",Motion="No move attempted",Recording=false}
+    local Players=game:GetService(&quot;Players&quot;)
+    local M={Status=&quot;Off&quot;,Dodging=false,Reactions=0,AutomaticMoves=0,TestMoves=0,NativeDashes=0,Sidesteps=0,Teleports=0,SpeedBursts=0,LastSpeedResult=&quot;No burst&quot;,BurstRejected=false,ThreatPending=false,LocalBlockReason=&quot;None&quot;,LastAutoDash=&quot;Not attempted&quot;,LastTestDash=&quot;Not attempted&quot;,LastDash=&quot;Not requested&quot;,LastDecision=&quot;No automatic cue processed&quot;,LastCue=nil,LastMode=nil,LastDistance=0,TrackedHitboxes=0,Cues=0,Attempts=0,Animations=0,LastBlock=&quot;None&quot;,Motion=&quot;No move attempted&quot;,Recording=false}
     local records,tracked,pending={},{ },{}
     local clock,age,retry,holdUntil=0,0,0,0
     local enabled,dead=false,false
@@ -1294,23 +1298,23 @@ return function(ctx)
     local blocks={}
     local function log(message)
         if #trace&gt;=100 then table.remove(trace,1) end
-        table.insert(trace,string.format("%.2f %s",clock,message))
+        table.insert(trace,string.format(&quot;%.2f %s&quot;,clock,message))
     end
     local function observing() return ctx.Config.UltraInstinct or M.Recording end
     local function snapshot(node)
         local fields={};local attrs=node:GetAttributes();local keys={}
         for key,value in pairs(attrs) do
-            if type(value)=="string" or type(value)=="number" or type(value)=="boolean" then table.insert(keys,key) end
+            if type(value)==&quot;string&quot; or type(value)==&quot;number&quot; or type(value)==&quot;boolean&quot; then table.insert(keys,key) end
         end
         table.sort(keys)
-        for i,key in ipairs(keys) do if i&gt;48 then break end;table.insert(fields,key.."="..tostring(attrs[key]):sub(1,100)) end
-        return table.concat(fields,", ")
+        for i,key in ipairs(keys) do if i&gt;48 then break end;table.insert(fields,key..&quot;=&quot;..tostring(attrs[key]):sub(1,100)) end
+        return table.concat(fields,&quot;, &quot;)
     end
     local function safe(root,goal,target,boxes)
         M.Attempts+=1
         local ok,allowed,reason=pcall(ctx.Safe,root,goal,target,boxes)
         if ok and allowed then return true end
-        reason=ok and (reason or "Clearance rejected") or ("Clearance error: "..tostring(allowed))
+        reason=ok and (reason or &quot;Clearance rejected&quot;) or (&quot;Clearance error: &quot;..tostring(allowed))
         M.LastBlock=reason;blocks[reason]=(blocks[reason] or 0)+1
         return false
     end
@@ -1319,48 +1323,48 @@ return function(ctx)
         table.clear(trace);table.clear(blocks);recordUntil=clock+10;M.Recording=true
         for _,record in pairs(records) do record.LogValues=nil end
         M.EncounterStart={Auto=M.AutomaticMoves,Tests=M.TestMoves,Cues=M.Cues}
-        log("Encounter recording started (10 seconds; observational only)")
+        log(&quot;Encounter recording started (10 seconds; observational only)&quot;)
         return true
     end
     function M.Diagnostics()
-        local lines={"Ultra Instinct live report", "Status: "..M.Status,"Recording: "..tostring(M.Recording),
-            "Attack cues: "..M.Cues.." | animations seen: "..M.Animations.." | hitboxes tracked: "..M.TrackedHitboxes,
-            "Clearance attempts: "..M.Attempts.." | move requests: "..M.Reactions.." (automatic="..M.AutomaticMoves..", manual tests="..M.TestMoves..")",
-            "Last automatic decision: "..M.LastDecision,
-            "Character movement gate: "..M.LocalBlockReason,
-            "Last automatic dash: "..M.LastAutoDash.." | last dash test: "..M.LastTestDash,
-            "Speed bursts: "..M.SpeedBursts.." | configured speed="..ctx.Config.InstinctBurstSpeed.." | last requested="..tostring(M.LastBurstSpeed).." | "..M.LastSpeedResult,
-            "Movement requests: teleports="..M.Teleports..", native dash="..M.NativeDashes..", walking sidesteps="..M.Sidesteps.." | dash status="..M.LastDash,
-            "Last cue: "..tostring(M.LastCue).." | last blocker: "..M.LastBlock,
-            "Movement observation: "..M.Motion.." | last observed travel="..tostring(M.LastObservedTravel),
-            "Manual movement present: "..tostring(ctx.ManualMovement()).." | last assist window="..tostring(M.LastAssistWindow).." seconds (up to 0.5; changed input cancels)","Rejected destinations:"}
-        local reasons={};for reason,count in pairs(blocks) do table.insert(reasons,reason.." = "..count) end;table.sort(reasons)
+        local lines={&quot;Ultra Instinct live report&quot;, &quot;Status: &quot;..M.Status,&quot;Recording: &quot;..tostring(M.Recording),
+            &quot;Attack cues: &quot;..M.Cues..&quot; | animations seen: &quot;..M.Animations..&quot; | hitboxes tracked: &quot;..M.TrackedHitboxes,
+            &quot;Clearance attempts: &quot;..M.Attempts..&quot; | move requests: &quot;..M.Reactions..&quot; (automatic=&quot;..M.AutomaticMoves..&quot;, manual tests=&quot;..M.TestMoves..&quot;)&quot;,
+            &quot;Last automatic decision: &quot;..M.LastDecision,
+            &quot;Character movement gate: &quot;..M.LocalBlockReason,
+            &quot;Last automatic dash: &quot;..M.LastAutoDash..&quot; | last dash test: &quot;..M.LastTestDash,
+            &quot;Speed bursts: &quot;..M.SpeedBursts..&quot; | configured speed=&quot;..ctx.Config.InstinctBurstSpeed..&quot; | last requested=&quot;..tostring(M.LastBurstSpeed)..&quot; | &quot;..M.LastSpeedResult,
+            &quot;Movement requests: teleports=&quot;..M.Teleports..&quot;, native dash=&quot;..M.NativeDashes..&quot;, walking sidesteps=&quot;..M.Sidesteps..&quot; | dash status=&quot;..M.LastDash,
+            &quot;Last cue: &quot;..tostring(M.LastCue)..&quot; | last blocker: &quot;..M.LastBlock,
+            &quot;Movement observation: &quot;..M.Motion..&quot; | last observed travel=&quot;..tostring(M.LastObservedTravel),
+            &quot;Manual movement present: &quot;..tostring(ctx.ManualMovement())..&quot; | last assist window=&quot;..tostring(M.LastAssistWindow)..&quot; seconds (up to 0.5; changed input cancels)&quot;,&quot;Rejected destinations:&quot;}
+        local reasons={};for reason,count in pairs(blocks) do table.insert(reasons,reason..&quot; = &quot;..count) end;table.sort(reasons)
         for _,line in ipairs(reasons) do table.insert(lines,line) end
         if M.EncounterStart then
-            table.insert(lines,"Since encounter recording started: automatic="..(M.AutomaticMoves-M.EncounterStart.Auto)..", tests="..(M.TestMoves-M.EncounterStart.Tests)..", cues="..(M.Cues-M.EncounterStart.Cues))
+            table.insert(lines,&quot;Since encounter recording started: automatic=&quot;..(M.AutomaticMoves-M.EncounterStart.Auto)..&quot;, tests=&quot;..(M.TestMoves-M.EncounterStart.Tests)..&quot;, cues=&quot;..(M.Cues-M.EncounterStart.Cues))
         end
-        table.insert(lines,"Teleport mode: "..tostring(ctx.Config.TeleportDodge).." (local request; server acceptance unverified)")
-        table.insert(lines,"Enabled: "..tostring(ctx.Config.UltraInstinct).." | cue range="..ctx.Config.InstinctRange.." | walking destination cap="..ctx.Config.InstinctMaxDistance)
-        local canRun,pause=ctx.CanRun();table.insert(lines,"Input/camera context ready: "..tostring(canRun).." | "..tostring(pause))
+        table.insert(lines,&quot;Teleport mode: &quot;..tostring(ctx.Config.TeleportDodge)..&quot; (local request; server acceptance unverified)&quot;)
+        table.insert(lines,&quot;Enabled: &quot;..tostring(ctx.Config.UltraInstinct)..&quot; | cue range=&quot;..ctx.Config.InstinctRange..&quot; | walking destination cap=&quot;..ctx.Config.InstinctMaxDistance)
+        local canRun,pause=ctx.CanRun();table.insert(lines,&quot;Input/camera context ready: &quot;..tostring(canRun)..&quot; | &quot;..tostring(pause))
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        table.insert(lines,"Local body: "..(char and char:GetFullName() or "missing").." | anchored="..tostring(root and root.Anchored).." | PlatformStand="..tostring(hum and hum.PlatformStand))
-        if char then table.insert(lines,"Local fields: "..snapshot(char)) end
+        table.insert(lines,&quot;Local body: &quot;..(char and char:GetFullName() or &quot;missing&quot;)..&quot; | anchored=&quot;..tostring(root and root.Anchored)..&quot; | PlatformStand=&quot;..tostring(hum and hum.PlatformStand))
+        if char then table.insert(lines,&quot;Local fields: &quot;..snapshot(char)) end
         for _,plr in ipairs(Players:GetPlayers()) do
             if ctx.Opposing(plr) then
                 local model,_,otherRoot=ctx.Body(plr);local record=records[plr]
-                local distance=root and otherRoot and string.format("%.1f",(root.Position-otherRoot.Position).Magnitude) or "unknown"
-                table.insert(lines,"@"..plr.Name.." distance="..distance.." watched="..tostring(record~=nil).." cue="..tostring(record and record.Cue and record.Cue.Reason).." decision="..tostring(record and record.Decision).." | "..(model and snapshot(model) or "body missing"))
-                if #lines&gt;=45 then table.insert(lines,"[nearby player report capped]");break end
+                local distance=root and otherRoot and string.format(&quot;%.1f&quot;,(root.Position-otherRoot.Position).Magnitude) or &quot;unknown&quot;
+                table.insert(lines,&quot;@&quot;..plr.Name..&quot; distance=&quot;..distance..&quot; watched=&quot;..tostring(record~=nil)..&quot; cue=&quot;..tostring(record and record.Cue and record.Cue.Reason)..&quot; decision=&quot;..tostring(record and record.Decision)..&quot; | &quot;..(model and snapshot(model) or &quot;body missing&quot;))
+                if #lines&gt;=45 then table.insert(lines,&quot;[nearby player report capped]&quot;);break end
             end
         end
-        table.insert(lines,"Recent events (client observations; effects are not necessarily damage hitboxes):")
+        table.insert(lines,&quot;Recent events (client observations; effects are not necessarily damage hitboxes):&quot;)
         for _,line in ipairs(trace) do table.insert(lines,line) end
-        return table.concat(lines,"\n")
+        return table.concat(lines,&quot;\n&quot;)
     end
     local states={attack=true,attacking=true,casting=true,charging=true,windup=true,swinging=true,usingability=true,skill=true}
     local containers={projectiles=true,abilities=true,effects=true,vfx=true,hitboxes=true,attacks=true,damagezones=true}
-    local function norm(s) return type(s)=="string" and s:lower():gsub("[^%w]","") or "" end
-    local function finite(n) return type(n)=="number" and n==n and math.abs(n)&lt;math.huge end
+    local function norm(s) return type(s)==&quot;string&quot; and s:lower():gsub(&quot;[^%w]&quot;,&quot;&quot;) or &quot;&quot; end
+    local function finite(n) return type(n)==&quot;number&quot; and n==n and math.abs(n)&lt;math.huge end
     local function cue(record,reason,ability)
         -- Different replicated fields can describe the same attack. Keep one pending cue.
         local previous=record.Cue
@@ -1371,11 +1375,11 @@ return function(ctx)
         if not previous and record.LastCueAt and clock-record.LastCueAt&lt;0.2 then return end
         record.LastCueAt=clock
         record.Cue={At=clock,Reason=reason,Ability=ability};record.Decision=nil;M.LastCue=reason;M.Cues+=1
-        log("Cue @"..record.Player.Name..": "..reason)
+        log(&quot;Cue @&quot;..record.Player.Name..&quot;: &quot;..reason)
     end
     local function decision(record,reason)
         M.LastDecision=reason
-        if record.Decision~=reason then record.Decision=reason;log("Automatic @"..record.Player.Name..": "..reason) end
+        if record.Decision~=reason then record.Decision=reason;log(&quot;Automatic @&quot;..record.Player.Name..&quot;: &quot;..reason) end
     end
     function M.Stop()
         local old=motion;motion=nil;M.Dodging=false;holdUntil=0
@@ -1383,8 +1387,8 @@ return function(ctx)
             pcall(function()
                 -- Do not overwrite a speed that the game changed during the maneuver.
                 if math.abs(old.Hum.WalkSpeed-old.BoostSpeed)&lt;0.01 then
-                    old.Hum.WalkSpeed=old.BaseSpeed;M.LastSpeedResult="Restored speed "..old.BaseSpeed
-                else M.LastSpeedResult="Game changed speed; preserved "..old.Hum.WalkSpeed end
+                    old.Hum.WalkSpeed=old.BaseSpeed;M.LastSpeedResult=&quot;Restored speed &quot;..old.BaseSpeed
+                else M.LastSpeedResult=&quot;Game changed speed; preserved &quot;..old.Hum.WalkSpeed end
             end)
         end
         if old and old.Hum.Parent then
@@ -1400,30 +1404,30 @@ return function(ctx)
         if requested&lt;=original then return end
         active.BaseSpeed=original;active.BoostSpeed=requested
         active.Hum.WalkSpeed=requested
-        M.SpeedBursts+=1;M.LastBurstSpeed=requested;M.LastSpeedResult="Burst requested at speed "..requested
+        M.SpeedBursts+=1;M.LastBurstSpeed=requested;M.LastSpeedResult=&quot;Burst requested at speed &quot;..requested
         local remaining=(active.Goal-active.Root.Position).Magnitude
         local window=math.min(remaining/requested+0.02,0.25)
         holdUntil=clock+window;active.WallUntil=os.clock()+window;M.LastAssistWindow=window
-        log(M.LastSpeedResult.."; planned distance="..string.format("%.2f",remaining))
+        log(M.LastSpeedResult..&quot;; planned distance=&quot;..string.format(&quot;%.2f&quot;,remaining))
     end
     function M.Steer(dt)
         if not motion or not M.Dodging then return end
-        if not ctx.CanRun() then M.Stop();M.Status="Paused for input or camera";return end
+        if not ctx.CanRun() then M.Stop();M.Status=&quot;Paused for input or camera&quot;;return end
         local intent=ctx.MovementIntent()
         if intent and motion.Intent and (intent-motion.Intent).Magnitude&gt;0.35 then
-            M.Stop();M.Status="Your changed movement input took control";return
+            M.Stop();M.Status=&quot;Your changed movement input took control&quot;;return
         end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute("canRun")==false or char:GetAttribute("LOCKED_INPUTS")==true or char:GetAttribute("cutsceneLock")==true then M.Stop();return end
+        if root~=motion.Root or hum~=motion.Hum or root.Anchored or hum.PlatformStand or char:GetAttribute(&quot;canRun&quot;)==false or char:GetAttribute(&quot;LOCKED_INPUTS&quot;)==true or char:GetAttribute(&quot;cutsceneLock&quot;)==true then M.Stop();return end
         if motion.BoostSpeed and math.abs(hum.WalkSpeed-motion.BoostSpeed)&gt;0.01 then
             -- The live game rewrites WalkSpeed. Preserve its value and keep the legal sidestep alive.
             burstBlockedRoot=root;M.BurstRejected=true;motion.BoostSpeed=nil;motion.BaseSpeed=nil;motion.PendingBoost=nil
-            M.LastSpeedResult="Game replaced burst speed with "..hum.WalkSpeed.."; using its movement speed"
+            M.LastSpeedResult=&quot;Game replaced burst speed with &quot;..hum.WalkSpeed..&quot;; using its movement speed&quot;
             log(M.LastSpeedResult)
             local remaining=(motion.Goal-root.Position).Magnitude
             local window=math.max(0,math.min(remaining/math.max(hum.WalkSpeed,1),motion.StartClock+0.5-clock))
             holdUntil=clock+window;motion.WallUntil=math.min(os.clock()+window,motion.StartWall+0.5)
-            M.LastAssistWindow=window;M.LastMode="Sidestep at game-controlled speed";M.Status=M.LastMode
+            M.LastAssistWindow=window;M.LastMode=&quot;Sidestep at game-controlled speed&quot;;M.Status=M.LastMode
         end
         if motion.PendingBoost and clock&gt;=motion.PendingBoost then
             motion.PendingBoost=nil
@@ -1439,7 +1443,7 @@ return function(ctx)
             motion.CheckAt=clock+0.05
             local frameTime=math.clamp(tonumber(dt) or 1/60,0.001,0.1)
             local checkGoal=root.Position+delta.Unit*math.min(delta.Magnitude,math.max(1.5,hum.WalkSpeed*frameTime+0.5))
-            if not safe(root,checkGoal,nil,motion.Boxes) then M.Stop();M.Status="Sidestep stopped: obstruction";return end
+            if not safe(root,checkGoal,nil,motion.Boxes) then M.Stop();M.Status=&quot;Sidestep stopped: obstruction&quot;;return end
         end
         local frameTime=math.clamp(tonumber(dt) or 1/60,0.001,0.1)
         local strength=math.min(1,delta.Magnitude/(math.max(hum.WalkSpeed,1)*frameTime))
@@ -1464,10 +1468,10 @@ return function(ctx)
             for _,plr in ipairs(Players:GetPlayers()) do
                 if node==plr.Character then return plr end
             end
-            for _,key in ipairs({"OwnerUserId","CasterUserId","AttackerUserId","Owner","Caster","Attacker","Creator","creator"}) do
+            for _,key in ipairs({&quot;OwnerUserId&quot;,&quot;CasterUserId&quot;,&quot;AttackerUserId&quot;,&quot;Owner&quot;,&quot;Caster&quot;,&quot;Attacker&quot;,&quot;Creator&quot;,&quot;creator&quot;}) do
                 local value=node:GetAttribute(key)
                 local object=node:FindFirstChild(key)
-                if object and object:IsA("ObjectValue") then value=object.Value end
+                if object and object:IsA(&quot;ObjectValue&quot;) then value=object.Value end
                 for _,plr in ipairs(Players:GetPlayers()) do
                     if value~=nil and (value==plr or plr.Character and value==plr.Character or value==plr.UserId or value==tostring(plr.UserId) or value==plr.Name) then return plr end
                 end
@@ -1476,13 +1480,13 @@ return function(ctx)
         end
     end
     local function classification(part)
-        if not part:IsA("BasePart") or not part.Parent then return false end
-        if part:GetAttribute("Active")==false or part:GetAttribute("DamageActive")==false or part:GetAttribute("Enabled")==false then return false end
+        if not part:IsA(&quot;BasePart&quot;) or not part.Parent then return false end
+        if part:GetAttribute(&quot;Active&quot;)==false or part:GetAttribute(&quot;DamageActive&quot;)==false or part:GetAttribute(&quot;Enabled&quot;)==false then return false end
         local name=norm(part.Name)
-        local explicit=part:GetAttribute("IsAttack")==true or part:GetAttribute("IsHitbox")==true or part:GetAttribute("IsProjectile")==true
-        local named=name:find("hitbox",1,true) or name:find("damagezone",1,true) or name:find("projectile",1,true)
-        local effect=name:find("repulsor",1,true) or name:find("unibeam",1,true) or name:find("geyser",1,true)
-            or name:find("fireball",1,true) or name:find("shockwave",1,true) or name:find("waterbreath",1,true)
+        local explicit=part:GetAttribute(&quot;IsAttack&quot;)==true or part:GetAttribute(&quot;IsHitbox&quot;)==true or part:GetAttribute(&quot;IsProjectile&quot;)==true
+        local named=name:find(&quot;hitbox&quot;,1,true) or name:find(&quot;damagezone&quot;,1,true) or name:find(&quot;projectile&quot;,1,true)
+        local effect=name:find(&quot;repulsor&quot;,1,true) or name:find(&quot;unibeam&quot;,1,true) or name:find(&quot;geyser&quot;,1,true)
+            or name:find(&quot;fireball&quot;,1,true) or name:find(&quot;shockwave&quot;,1,true) or name:find(&quot;waterbreath&quot;,1,true)
         if not explicit and not named and not effect then return false end
         local owner=ownerOf(part)
         if owner==Players.LocalPlayer or owner and not ctx.Opposing(owner) then return false end
@@ -1490,10 +1494,10 @@ return function(ctx)
         for _=1,5 do
             if not node or node==workspace then break end
             if containers[norm(node.Name)] then runtimeFolder=true end
-            if node:FindFirstChildOfClass("Humanoid") then characterPart=true end
+            if node:FindFirstChildOfClass(&quot;Humanoid&quot;) then characterPart=true end
             node=node.Parent
         end
-        -- A character's ordinary body hitbox and static map parts are not attack evidence.
+        -- A character&#x27;s ordinary body hitbox and static map parts are not attack evidence.
         if characterPart and not explicit then return false end
         if not explicit and not runtimeFolder and not owner then return false end
         return true,owner
@@ -1503,21 +1507,21 @@ return function(ctx)
         if classification(node) then
             local count=0;for _ in pairs(tracked) do count+=1 end
             if count&lt;256 or tracked[node] then
-                if not tracked[node] and M.Recording then log("Accepted attack candidate "..node:GetFullName().." | "..snapshot(node)) end
+                if not tracked[node] and M.Recording then log(&quot;Accepted attack candidate &quot;..node:GetFullName()..&quot; | &quot;..snapshot(node)) end
                 tracked[node]=tracked[node] or {At=clock,ReactedAt=-math.huge}
             end
         end
     end
     if workspace.DescendantAdded then
         addedConnection=workspace.DescendantAdded:Connect(function(node)
-            if dead or not observing() or not node:IsA("BasePart") then return end
+            if dead or not observing() or not node:IsA(&quot;BasePart&quot;) then return end
             local count=0;for _ in pairs(pending) do count+=1 end
             if count&lt;256 then pending[node]=clock end
             remember(node)
             if M.Recording then
                 local _,_,root=ctx.Body(Players.LocalPlayer)
-                if root and norm(node.Name)~="footstepvfx" and (node.Position-root.Position).Magnitude&lt;48 then
-                    log("New part "..node:GetFullName().." size="..tostring(node.Size).." accepted="..tostring(classification(node)).." | "..snapshot(node))
+                if root and norm(node.Name)~=&quot;footstepvfx&quot; and (node.Position-root.Position).Magnitude&lt;48 then
+                    log(&quot;New part &quot;..node:GetFullName()..&quot; size=&quot;..tostring(node.Size)..&quot; accepted=&quot;..tostring(classification(node))..&quot; | &quot;..snapshot(node))
                 end
             end
         end)
@@ -1531,22 +1535,22 @@ return function(ctx)
             local animation=track.Animation
             M.Animations+=1
                         local name=norm(track.Name)..norm(animation and animation.Name)
-            local locomotion=name:find("idle",1,true) or name:find("walk",1,true) or name:find("run",1,true) or name:find("jump",1,true) or name:find("fall",1,true)
+            local locomotion=name:find(&quot;idle&quot;,1,true) or name:find(&quot;walk&quot;,1,true) or name:find(&quot;run&quot;,1,true) or name:find(&quot;jump&quot;,1,true) or name:find(&quot;fall&quot;,1,true)
             if locomotion then return end
-            local attacking=track:GetAttribute("IsAttack")==true or animation and animation:GetAttribute("IsAttack")==true
-            for _,word in ipairs({"punch","swing","attack","windup","repulsor","unibeam","geyser","waterbreath","tentaclesmack","ability","cast","charge"}) do
+            local attacking=track:GetAttribute(&quot;IsAttack&quot;)==true or animation and animation:GetAttribute(&quot;IsAttack&quot;)==true
+            for _,word in ipairs({&quot;punch&quot;,&quot;swing&quot;,&quot;attack&quot;,&quot;windup&quot;,&quot;repulsor&quot;,&quot;unibeam&quot;,&quot;geyser&quot;,&quot;waterbreath&quot;,&quot;tentaclesmack&quot;,&quot;ability&quot;,&quot;cast&quot;,&quot;charge&quot;}) do
                 if name:find(word,1,true) then attacking=true;break end
             end
             local action=track.Priority==Enum.AnimationPriority.Action or track.Priority==Enum.AnimationPriority.Action2 or track.Priority==Enum.AnimationPriority.Action3 or track.Priority==Enum.AnimationPriority.Action4
-            if M.Recording and (attacking or action) then log("Animation @"..plr.Name.." "..track.Name.." id="..tostring(animation and animation.AnimationId).." priority="..tostring(track.Priority).." | "..snapshot(char)) end
-            if attacking then cue(record,"Attack animation",not name:find("punch",1,true) and not name:find("swing",1,true))
+            if M.Recording and (attacking or action) then log(&quot;Animation @&quot;..plr.Name..&quot; &quot;..track.Name..&quot; id=&quot;..tostring(animation and animation.AnimationId)..&quot; priority=&quot;..tostring(track.Priority)..&quot; | &quot;..snapshot(char)) end
+            if attacking then cue(record,&quot;Attack animation&quot;,not name:find(&quot;punch&quot;,1,true) and not name:find(&quot;swing&quot;,1,true))
             elseif track.Priority==Enum.AnimationPriority.Action or track.Priority==Enum.AnimationPriority.Action2 or track.Priority==Enum.AnimationPriority.Action3 or track.Priority==Enum.AnimationPriority.Action4 then
                 record.ActionAt=clock
                 -- Live report: Action4 + castLocked can occur with busy=false/canAttack=true.
-                if char:GetAttribute("castLocked")==true then cue(record,"Action animation + castLocked (estimate)",true);record.ActionAt=nil end
+                if char:GetAttribute(&quot;castLocked&quot;)==true then cue(record,&quot;Action animation + castLocked (estimate)&quot;,true);record.ActionAt=nil end
             end
         end
-        local animator=hum:FindFirstChildOfClass("Animator")
+        local animator=hum:FindFirstChildOfClass(&quot;Animator&quot;)
         if animator and animator~=record.Animator then
             if record.Connection then record.Connection:Disconnect() end;record.Animator=animator
             record.Connection=animator.AnimationPlayed:Connect(animationCue)
@@ -1554,42 +1558,42 @@ return function(ctx)
         end
         local function fields()
             if dead or not observing() then return end
-            local stateName=norm(char:GetAttribute("state"))
-            local ability=({casting=true,charging=true,windup=true,usingability=true,skill=true})[stateName]==true or char:GetAttribute("IsCasting")==true
-            local state=states[stateName]==true or char:GetAttribute("IsAttacking")==true or char:GetAttribute("IsCasting")==true
-            local combo=tonumber(char:GetAttribute("combo"))
-            local castLocked=char:GetAttribute("castLocked")==true
+            local stateName=norm(char:GetAttribute(&quot;state&quot;))
+            local ability=({casting=true,charging=true,windup=true,usingability=true,skill=true})[stateName]==true or char:GetAttribute(&quot;IsCasting&quot;)==true
+            local state=states[stateName]==true or char:GetAttribute(&quot;IsAttacking&quot;)==true or char:GetAttribute(&quot;IsCasting&quot;)==true
+            local combo=tonumber(char:GetAttribute(&quot;combo&quot;))
+            local castLocked=char:GetAttribute(&quot;castLocked&quot;)==true
             if record.Initialized then
-                if state and not record.Attacking then cue(record,"Attack state: "..stateName,ability) end
-                if castLocked and not record.CastLocked and stateName~="ragdolled" and stateName~="stunned" then
-                    cue(record,"castLocked started (estimated ability)",true)
+                if state and not record.Attacking then cue(record,&quot;Attack state: &quot;..stateName,ability) end
+                if castLocked and not record.CastLocked and stateName~=&quot;ragdolled&quot; and stateName~=&quot;stunned&quot; then
+                    cue(record,&quot;castLocked started (estimated ability)&quot;,true)
                 end
                 -- Each source has its own baseline; lastSwing must never mask m1Resolved.
-                for _,key in ipairs({"lastSwing","m1Resolved","lastAttack","CastStartedAt","AbilityStartedAt","lastCast","LastAbility"}) do
+                for _,key in ipairs({&quot;lastSwing&quot;,&quot;m1Resolved&quot;,&quot;lastAttack&quot;,&quot;CastStartedAt&quot;,&quot;AbilityStartedAt&quot;,&quot;lastCast&quot;,&quot;LastAbility&quot;}) do
                     local value=char:GetAttribute(key);local previous=record.Values[key]
-                    local isMelee=key=="lastSwing" or key=="m1Resolved" or key=="lastAttack"
+                    local isMelee=key==&quot;lastSwing&quot; or key==&quot;m1Resolved&quot; or key==&quot;lastAttack&quot;
                     local changed=value~=nil and value~=previous
                     if isMelee then changed=finite(tonumber(value)) and tonumber(value)&gt;0 and (previous==nil or tonumber(value)&gt;(tonumber(previous) or 0)) end
-                    if changed then cue(record,(isMelee and "Melee field: " or "Ability field: ")..key,not isMelee) end
+                    if changed then cue(record,(isMelee and &quot;Melee field: &quot; or &quot;Ability field: &quot;)..key,not isMelee) end
                 end
-                if combo and combo&gt;0 and combo~=record.Combo then cue(record,"Combo advanced",false) end
-            elseif state then cue(record,"Active attack",ability) end
-            local locked=char:GetAttribute("busy")==true and char:GetAttribute("canAttack")==false
+                if combo and combo&gt;0 and combo~=record.Combo then cue(record,&quot;Combo advanced&quot;,false) end
+            elseif state then cue(record,&quot;Active attack&quot;,ability) end
+            local locked=char:GetAttribute(&quot;busy&quot;)==true and char:GetAttribute(&quot;canAttack&quot;)==false
             if record.ActionAt and clock-record.ActionAt&lt;0.25 and (locked or castLocked) then
-                cue(record,castLocked and "Action animation + castLocked (estimate)" or "Action animation + combat lock",true);record.ActionAt=nil
+                cue(record,castLocked and &quot;Action animation + castLocked (estimate)&quot; or &quot;Action animation + combat lock&quot;,true);record.ActionAt=nil
             end
             record.Values={}
-            for _,key in ipairs({"lastSwing","m1Resolved","lastAttack","CastStartedAt","AbilityStartedAt","lastCast","LastAbility"}) do record.Values[key]=char:GetAttribute(key) end
+            for _,key in ipairs({&quot;lastSwing&quot;,&quot;m1Resolved&quot;,&quot;lastAttack&quot;,&quot;CastStartedAt&quot;,&quot;AbilityStartedAt&quot;,&quot;lastCast&quot;,&quot;LastAbility&quot;}) do record.Values[key]=char:GetAttribute(key) end
             record.Initialized=true;record.Attacking=state;record.Combo=combo;record.CastLocked=castLocked
             if M.Recording then
                 local attrs=snapshot(char)
-                if attrs~=record.LogValues then log("Fields @"..plr.Name..": "..attrs);record.LogValues=attrs end
+                if attrs~=record.LogValues then log(&quot;Fields @&quot;..plr.Name..&quot;: &quot;..attrs);record.LogValues=attrs end
             end
         end
         if not record.Bound then
             record.Bound=true
             -- Event listeners retain short attack transitions that can disappear between heartbeats.
-            for _,key in ipairs({"state","IsAttacking","IsCasting","lastSwing","m1Resolved","lastAttack","CastStartedAt","AbilityStartedAt","lastCast","LastAbility","combo","busy","canAttack","castLocked"}) do
+            for _,key in ipairs({&quot;state&quot;,&quot;IsAttacking&quot;,&quot;IsCasting&quot;,&quot;lastSwing&quot;,&quot;m1Resolved&quot;,&quot;lastAttack&quot;,&quot;CastStartedAt&quot;,&quot;AbilityStartedAt&quot;,&quot;lastCast&quot;,&quot;LastAbility&quot;,&quot;combo&quot;,&quot;busy&quot;,&quot;canAttack&quot;,&quot;castLocked&quot;}) do
                 pcall(function() table.insert(record.Attributes,char:GetAttributeChangedSignal(key):Connect(fields)) end)
             end
         end
@@ -1597,16 +1601,16 @@ return function(ctx)
         return record
     end
     local function movementBlock(char,hum,root,teleport)
-        if not root or not char or not hum then return "Character not ready" end
-        if root.Anchored then return "Root is anchored" end
-        if char:GetAttribute("inArena")==false then return "Outside arena" end
-        if char:GetAttribute("MorphAppearanceReady")==false then return "Hero not ready" end
+        if not root or not char or not hum then return &quot;Character not ready&quot; end
+        if root.Anchored then return &quot;Root is anchored&quot; end
+        if char:GetAttribute(&quot;inArena&quot;)==false then return &quot;Outside arena&quot; end
+        if char:GetAttribute(&quot;MorphAppearanceReady&quot;)==false then return &quot;Hero not ready&quot; end
         -- Teleport requests do not depend on walking inputs; this does not clear or defeat game locks.
         if teleport then return nil end
-        if char:GetAttribute("LOCKED_INPUTS")==true then return "Game locked inputs (LOCKED_INPUTS=true)" end
-        if char:GetAttribute("cutsceneLock")==true then return "Game cutscene/ability lock (cutsceneLock=true)" end
-        if char:GetAttribute("canRun")==false then return "Game locked movement (canRun=false)" end
-        if hum.PlatformStand then return "Character is in PlatformStand" end
+        if char:GetAttribute(&quot;LOCKED_INPUTS&quot;)==true then return &quot;Game locked inputs (LOCKED_INPUTS=true)&quot; end
+        if char:GetAttribute(&quot;cutsceneLock&quot;)==true then return &quot;Game cutscene/ability lock (cutsceneLock=true)&quot; end
+        if char:GetAttribute(&quot;canRun&quot;)==false then return &quot;Game locked movement (canRun=false)&quot; end
+        if hum.PlatformStand then return &quot;Character is in PlatformStand&quot; end
     end
     local function eligible(char,hum,root,teleport) return movementBlock(char,hum,root,teleport)==nil end
     local function geometry(part,root)
@@ -1620,7 +1624,7 @@ return function(ctx)
     end
     local function interval(box,direction)
         local d=box.CF:VectorToObjectSpace(direction);local p=box.Local;local lo,hi=-math.huge,math.huge
-        for _,axis in ipairs({"X","Y","Z"}) do
+        for _,axis in ipairs({&quot;X&quot;,&quot;Y&quot;,&quot;Z&quot;}) do
             local v=d[axis];local x=p[axis];local h=box.Half[axis]
             if math.abs(v)&lt;0.00001 then if math.abs(x)&gt;h then return nil end
             else
@@ -1640,7 +1644,7 @@ return function(ctx)
             overlap.FilterDescendantsInstances={ctx.Body(Players.LocalPlayer)}
             for _,part in ipairs(workspace:GetPartBoundsInRadius(root.Position,16,overlap)) do remember(part) end
         end)
-        if not queryOK and M.LastQueryError~=tostring(queryError) then M.LastQueryError=tostring(queryError);log("Nearby query failed: "..M.LastQueryError) end
+        if not queryOK and M.LastQueryError~=tostring(queryError) then M.LastQueryError=tostring(queryError);log(&quot;Nearby query failed: &quot;..M.LastQueryError) end
         local boxes,overlapping={},{}
         local count=0
         for part,entry in pairs(tracked) do
@@ -1660,87 +1664,87 @@ return function(ctx)
         if distance&lt;0.2 or distance&gt;ctx.Config.InstinctMaxDistance+0.001 then return false end
         local char,hum,current=ctx.Body(Players.LocalPlayer)
         local teleport=ctx.Config.TeleportDodge and not nativeOnly
-        if current~=root or not eligible(char,hum,root,teleport) then M.LastBlock="Movement unavailable";return false end
+        if current~=root or not eligible(char,hum,root,teleport) then M.LastBlock=&quot;Movement unavailable&quot;;return false end
         M.Stop()
         if teleport then
             local start=root.Position
             local ok,err=pcall(function() root.CFrame=root.CFrame+(goal-start) end)
-            if not ok then M.LastBlock="Teleport write failed: "..tostring(err);return false,M.LastBlock end
+            if not ok then M.LastBlock=&quot;Teleport write failed: &quot;..tostring(err);return false,M.LastBlock end
             probe={Root=root,Start=start,Goal=goal,At=clock,Direction=offset.Unit,Distance=distance}
             M.Reactions+=1;M.Teleports+=1
-            if manual then M.TestMoves+=1 else M.AutomaticMoves+=1;M.LastCue=reason;M.LastAutoDash="Not used: teleport mode" end
-            M.LastMode="Local teleport request · damage bounds estimated"
-            M.LastDistance=distance;M.LastDestination=goal;M.LastBlock="None";M.LastAssistWindow=0
-            M.Motion="Teleport requested; waiting for displacement observation"
+            if manual then M.TestMoves+=1 else M.AutomaticMoves+=1;M.LastCue=reason;M.LastAutoDash=&quot;Not used: teleport mode&quot; end
+            M.LastMode=&quot;Local teleport request · damage bounds estimated&quot;
+            M.LastDistance=distance;M.LastDestination=goal;M.LastBlock=&quot;None&quot;;M.LastAssistWindow=0
+            M.Motion=&quot;Teleport requested; waiting for displacement observation&quot;
             M.Status=M.LastMode;M.Dodging=true;holdUntil=clock+0.12;retry=clock+0.25
-            log("Teleport request distance="..string.format("%.2f",distance).." cue="..reason)
+            log(&quot;Teleport request distance=&quot;..string.format(&quot;%.2f&quot;,distance)..&quot; cue=&quot;..reason)
             return true
         end
         local speed=tonumber(hum.WalkSpeed) or 0
-        if speed&lt;=0 then M.LastBlock="Normal walking speed is zero";return false end
+        if speed&lt;=0 then M.LastBlock=&quot;Normal walking speed is zero&quot;;return false end
         local direction=offset.Unit
         local moving=ctx.ManualMovement()
         local window=math.min(distance/speed,0.5)
         motion={Root=root,Hum=hum,Start=root.Position,Goal=goal,Direction=direction,Limit=distance,Boxes=boxes or {},CheckAt=clock+0.05,InitialSpeed=speed,StartClock=clock,StartWall=os.clock(),MovingAssist=moving,Intent=ctx.MovementIntent(),WallUntil=os.clock()+window}
         M.LastAssistWindow=window
         M.Dodging=true
-        -- Set a normal walking direction before requesting the game's dash input.
+        -- Set a normal walking direction before requesting the game&#x27;s dash input.
         hum:Move(direction,false)
-        local native,dashReason=false,"Manual test: walking only"
+        local native,dashReason=false,&quot;Manual test: walking only&quot;
         if not manual or nativeOnly then native,dashReason=ctx.NativeDash(hum,root,direction) end
-        M.LastDash=dashReason or (native and "Dash input requested" or "Dash unavailable")
+        M.LastDash=dashReason or (native and &quot;Dash input requested&quot; or &quot;Dash unavailable&quot;)
         if nativeOnly then
             M.LastTestDash=M.LastDash
-            if not native then M.Stop();M.Status="Dash test: "..M.LastDash;return false,M.LastDash end
+            if not native then M.Stop();M.Status=&quot;Dash test: &quot;..M.LastDash;return false,M.LastDash end
         elseif not manual then M.LastAutoDash=M.LastDash end
         if native then
-            M.NativeDashes+=1;mode=nativeOnly and "Native dash test requested" or "Native dash requested"
+            M.NativeDashes+=1;mode=nativeOnly and &quot;Native dash test requested&quot; or &quot;Native dash requested&quot;
             -- Keep a brief normal walking input too: requesting input does not prove the game accepted a dash.
             holdUntil=clock+window
             if ctx.Config.FastSidestep and not nativeOnly then motion.PendingBoost=clock+0.08 end
         else
             if not manual then M.Sidesteps+=1 end
-            mode=manual and "Test sidestep (normal speed)" or "Walking sidestep · "..M.LastDash
+            mode=manual and &quot;Test sidestep (normal speed)&quot; or &quot;Walking sidestep · &quot;..M.LastDash
             holdUntil=clock+window
             startBurst(motion)
-            if motion.BoostSpeed then mode=manual and "Test speed burst" or "Fast sidestep · "..M.LastDash end
+            if motion.BoostSpeed then mode=manual and &quot;Test speed burst&quot; or &quot;Fast sidestep · &quot;..M.LastDash end
         end
         probe={Root=root,Start=root.Position,Goal=goal,At=clock,Direction=direction,Distance=math.min(distance,speed*0.12)}
-        M.Motion="Movement input requested; waiting for position observation"
-        log("Move request "..mode.." planned distance="..string.format("%.2f",distance))
+        M.Motion=&quot;Movement input requested; waiting for position observation&quot;
+        log(&quot;Move request &quot;..mode..&quot; planned distance=&quot;..string.format(&quot;%.2f&quot;,distance))
         M.Reactions+=1
-        if manual then M.TestMoves+=1 else M.AutomaticMoves+=1;M.LastCue=reason;M.LastDecision="Automatic movement requested: "..reason end
-        M.LastBlock="None";M.LastDistance=distance;M.LastDestination=goal;M.LastMode=mode
+        if manual then M.TestMoves+=1 else M.AutomaticMoves+=1;M.LastCue=reason;M.LastDecision=&quot;Automatic movement requested: &quot;..reason end
+        M.LastBlock=&quot;None&quot;;M.LastDistance=distance;M.LastDestination=goal;M.LastMode=mode
         retry=clock+0.45;M.Status=mode
         return true
     end
     function M.TestDodge(nativeOnly)
-        if dead or not ctx.CanRun() then return false,"Paused: close typing or dragging first" end
+        if dead or not ctx.CanRun() then return false,&quot;Paused: close typing or dragging first&quot; end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
-        if not eligible(char,hum,root,ctx.Config.TeleportDodge and not nativeOnly) then M.LastBlock=movementBlock(char,hum,root,ctx.Config.TeleportDodge and not nativeOnly) or "Character cannot move";return false,M.LastBlock end
+        if not eligible(char,hum,root,ctx.Config.TeleportDodge and not nativeOnly) then M.LastBlock=movementBlock(char,hum,root,ctx.Config.TeleportDodge and not nativeOnly) or &quot;Character cannot move&quot;;return false,M.LastBlock end
         local boxes=nearby(root)
         for i=0,7 do
             local angle=i*math.pi/4;local goal=root.Position+Vector3.new(math.cos(angle),0,math.sin(angle))*math.min(nativeOnly and 9 or ctx.Config.TeleportDodge and ctx.Config.InstinctMaxDistance or 4,ctx.Config.InstinctMaxDistance)
             local outside=true;for _,box in ipairs(boxes) do if inside(box,goal) then outside=false;break end end
-            if outside and safe(root,goal,nil,boxes) then return execute(root,goal,"Manual test (not attack detection)","Test dodge button",true,boxes,nativeOnly) end
+            if outside and safe(root,goal,nil,boxes) then return execute(root,goal,&quot;Manual test (not attack detection)&quot;,&quot;Test dodge button&quot;,true,boxes,nativeOnly) end
         end
-        M.Status="Test blocked: "..M.LastBlock;log(M.Status);return false,M.LastBlock
+        M.Status=&quot;Test blocked: &quot;..M.LastBlock;log(M.Status);return false,M.LastBlock
     end
     local function observeMove()
         if not probe then return end
         local _,_,current=ctx.Body(Players.LocalPlayer)
-        if not probe.Root.Parent or current~=probe.Root then M.Motion="Character changed before observation";probe=nil;return end
+        if not probe.Root.Parent or current~=probe.Root then M.Motion=&quot;Character changed before observation&quot;;probe=nil;return end
         local elapsed=clock-probe.At
         local progress=(probe.Root.Position-probe.Start):Dot(probe.Direction)
         M.LastObservedTravel=math.max(0,progress)
         if not probe.Checked and elapsed&gt;=0.12 then
             probe.Checked=true;probe.Moved=progress&gt;math.min(0.5,probe.Distance*0.35)
-            M.Motion=probe.Moved and "Local displacement observed; server acceptance unverified" or "No walking progress observed (blocked, movement lock or correction)"
-            log(M.Motion.." progress="..string.format("%.2f",progress))
+            M.Motion=probe.Moved and &quot;Local displacement observed; server acceptance unverified&quot; or &quot;No walking progress observed (blocked, movement lock or correction)&quot;
+            log(M.Motion..&quot; progress=&quot;..string.format(&quot;%.2f&quot;,progress))
         end
         if elapsed&gt;=0.65 then
             if probe.Moved and progress&lt;probe.Distance*0.2 then
-                M.Motion="Returned near start (possible correction or later movement)";log(M.Motion)
+                M.Motion=&quot;Returned near start (possible correction or later movement)&quot;;log(M.Motion)
             end
             probe=nil
         end
@@ -1748,26 +1752,26 @@ return function(ctx)
     function M.Step(dt)
         if dead then return end
         clock+=dt;age+=dt;observeMove();M.ThreatPending=false
-        if M.Recording and clock&gt;=recordUntil then M.Recording=false;log("Encounter recording complete; copy dodge report") end
+        if M.Recording and clock&gt;=recordUntil then M.Recording=false;log(&quot;Encounter recording complete; copy dodge report&quot;) end
         if not observing() then
             if motion then M.Steer(dt);if motion then return end end
-            if enabled then clear() end;enabled=false;M.Stop();retry=0;age=0;M.Status="Off";return
+            if enabled then clear() end;enabled=false;M.Stop();retry=0;age=0;M.Status=&quot;Off&quot;;return
         end
         if not enabled then
             enabled=true
             -- Existing non-queryable effects are discovered once; subsequent effects use DescendantAdded.
             local inspected=0
             for _,node in ipairs(workspace:GetDescendants()) do remember(node);inspected+=1;if inspected&gt;=12000 then break end end
-            log("Initial scene scan: "..inspected.." instances")
+            log(&quot;Initial scene scan: &quot;..inspected..&quot; instances&quot;)
         end
         if M.Dodging and clock&gt;=holdUntil then M.Stop() end
         local canRun,pause=ctx.CanRun()
-        if not canRun then M.Stop();M.Status="Paused: "..(pause or "input or camera");return end
+        if not canRun then M.Stop();M.Status=&quot;Paused: &quot;..(pause or &quot;input or camera&quot;);return end
         local char,hum,root=ctx.Body(Players.LocalPlayer)
         local blocked=movementBlock(char,hum,root,ctx.Config.TeleportDodge)
-        local walkingLocked=ctx.Config.TeleportDodge and (char and (char:GetAttribute("LOCKED_INPUTS")==true or char:GetAttribute("cutsceneLock")==true or char:GetAttribute("canRun")==false))
-        M.LocalBlockReason=blocked or (walkingLocked and "Walking inputs locked; local teleport can only be attempted" or "None");M.BurstRejected=burstBlockedRoot~=nil and burstBlockedRoot==root
-        if not root then M.Stop();M.Status=blocked or "Character not ready";return end
+        local walkingLocked=ctx.Config.TeleportDodge and (char and (char:GetAttribute(&quot;LOCKED_INPUTS&quot;)==true or char:GetAttribute(&quot;cutsceneLock&quot;)==true or char:GetAttribute(&quot;canRun&quot;)==false))
+        M.LocalBlockReason=blocked or (walkingLocked and &quot;Walking inputs locked; local teleport can only be attempted&quot; or &quot;None&quot;);M.BurstRejected=burstBlockedRoot~=nil and burstBlockedRoot==root
+        if not root then M.Stop();M.Status=blocked or &quot;Character not ready&quot;;return end
         if motion and not blocked then M.Steer(dt);if motion then return end end
         if age&lt;0.025 then return end;age=0
         -- Parenting can precede names/attributes; give new parts a short metadata window.
@@ -1788,7 +1792,7 @@ return function(ctx)
             return
         end
         M.LastLoggedBlock=nil
-        if not ctx.Config.UltraInstinct then M.Status="Recording only · no automatic movement";return end
+        if not ctx.Config.UltraInstinct then M.Status=&quot;Recording only · no automatic movement&quot;;return end
         local boxes,overlapping=nearby(root)
         if #overlapping&gt;0 and clock&gt;=retry then
             local bestGoal,bestDistance
@@ -1807,27 +1811,27 @@ return function(ctx)
                     if outside and safe(root,goal,nil,boxes) then bestGoal,bestDistance=goal,distance end
                 end
             end
-            if bestGoal and execute(root,bestGoal,"Local hitbox escape","Nearby active attack volume",false,boxes) then
+            if bestGoal and execute(root,bestGoal,&quot;Local hitbox escape&quot;,&quot;Nearby active attack volume&quot;,false,boxes) then
                 for _,box in ipairs(overlapping) do tracked[box.Part].ReactedAt=clock end
                 return
             end
-            if M.Attempts==previousAttempts then M.LastBlock="No detected-volume exit within "..ctx.Config.InstinctMaxDistance.." studs" end
-            M.Status="Attack exit blocked (see dodge report)";retry=clock+0.12;return
+            if M.Attempts==previousAttempts then M.LastBlock=&quot;No detected-volume exit within &quot;..ctx.Config.InstinctMaxDistance..&quot; studs&quot; end
+            M.Status=&quot;Attack exit blocked (see dodge report)&quot;;retry=clock+0.12;return
         end
         local bestRecord,bestRoot,bestDistance
         for _,plr in ipairs(Players:GetPlayers()) do
             if ctx.Opposing(plr) then
                 local otherChar,otherHum,otherRoot=ctx.Body(plr)
-                if otherRoot and otherChar:GetAttribute("inArena")~=false then
+                if otherRoot and otherChar:GetAttribute(&quot;inArena&quot;)~=false then
                     local record=records[plr];local distance=(root.Position-otherRoot.Position).Magnitude
                     if record and record.Cue then
                         local range=ctx.Config.InstinctRange
                         local age=clock-record.Cue.At
                         local reason
-                        if age&gt;=0.4 then reason="Cue expired before a move" end
-                        if not reason and (distance&lt;=0.2 or distance&gt;range) then reason="Outside configured nearby range" end
-                        if not reason and math.abs(root.Position.Y-otherRoot.Position.Y)&gt;=8 then reason="Different elevation" end
-                        if not reason and not ctx.Sight(root.Position,otherRoot.Position,otherChar) then reason="Attacker hidden by solid obstruction" end
+                        if age&gt;=0.4 then reason=&quot;Cue expired before a move&quot; end
+                        if not reason and (distance&lt;=0.2 or distance&gt;range) then reason=&quot;Outside configured nearby range&quot; end
+                        if not reason and math.abs(root.Position.Y-otherRoot.Position.Y)&gt;=8 then reason=&quot;Different elevation&quot; end
+                        if not reason and not ctx.Sight(root.Position,otherRoot.Position,otherChar) then reason=&quot;Attacker hidden by solid obstruction&quot; end
                         if reason then
                             decision(record,reason)
                         elseif not bestDistance or distance&lt;bestDistance then
@@ -1840,12 +1844,12 @@ return function(ctx)
         local stale={};for plr in pairs(records) do if plr.Parent~=Players then table.insert(stale,plr) end end;for _,plr in ipairs(stale) do remove(plr) end
         M.ThreatPending=bestRoot~=nil
         if not bestRoot or clock&lt;retry or #overlapping&gt;0 then
-            if bestRecord and clock&lt;retry then decision(bestRecord,"Waiting for short movement cooldown") end
-            if not M.Dodging then M.Status="Watching nearby attacks" end
+            if bestRecord and clock&lt;retry then decision(bestRecord,&quot;Waiting for short movement cooldown&quot;) end
+            if not M.Dodging then M.Status=&quot;Watching nearby attacks&quot; end
             return
         end
-        decision(bestRecord,"Nearby cue accepted; checking destinations")
-        -- No replicated hitbox: this is an estimate, not an assertion about the game's damage volume.
+        decision(bestRecord,&quot;Nearby cue accepted; checking destinations&quot;)
+        -- No replicated hitbox: this is an estimate, not an assertion about the game&#x27;s damage volume.
         local toward=Vector3.new(bestRoot.Position.X-root.Position.X,0,bestRoot.Position.Z-root.Position.Z)
         if toward.Magnitude&lt;0.2 then return end;toward=toward.Unit
         local side=Vector3.new(-toward.Z,0,toward.X)
@@ -1862,25 +1866,26 @@ return function(ctx)
                 for _,direction in ipairs(candidates) do
                     local goal=root.Position+direction*length;local outside=true
                     for _,box in ipairs(boxes) do if inside(box,goal) then outside=false;break end end
-                    if outside and safe(root,goal,bestRecord.Character,boxes) and execute(root,goal,"Short dodge · hitbox unknown",reason,false,boxes) then decision(bestRecord,"Automatic dodge requested");bestRecord.Cue=nil;return end
+                    if outside and safe(root,goal,bestRecord.Character,boxes) and execute(root,goal,&quot;Short dodge · hitbox unknown&quot;,reason,false,boxes) then decision(bestRecord,&quot;Automatic dodge requested&quot;);bestRecord.Cue=nil;return end
                 end
             end
         end
-        decision(bestRecord,"No clear local destination")
-        retry=clock+0.12;M.Status="Dodge blocked: "..M.LastBlock
+        decision(bestRecord,&quot;No clear local destination&quot;)
+        retry=clock+0.12;M.Status=&quot;Dodge blocked: &quot;..M.LastBlock
     end
     function M.Destroy()
         if dead then return end;dead=true;M.Recording=false;probe=nil;M.Stop();clear();if addedConnection then addedConnection:Disconnect() end
     end
     return M
 end
+
 end)()
 local MakeInterface=(function()
 -- Native animated interface; no downloaded UI library or flashing effects.
 return function(ctx)
     local API,cfg,gui=ctx.API,ctx.Config,ctx.Gui
-    local Input=game:GetService("UserInputService")
-    local Tween=game:GetService("TweenService")
+    local Input=game:GetService(&quot;UserInputService&quot;)
+    local Tween=game:GetService(&quot;TweenService&quot;)
     local C={Base=Color3.fromRGB(16,18,25),Panel=Color3.fromRGB(24,27,37),Raised=Color3.fromRGB(33,37,50),
         Line=Color3.fromRGB(55,61,80),Accent=Color3.fromRGB(178,161,255),Text=Color3.fromRGB(239,240,249),Sub=Color3.fromRGB(151,159,181)}
     local M={};local connections={};local dead=false
@@ -1889,24 +1894,24 @@ return function(ctx)
         for _,c in ipairs(connections) do c:Disconnect() end;table.clear(connections)
     end
     if ctx.RegisterCleanup then ctx.RegisterCleanup(function() M.Destroy() end) end
-    local orders=setmetatable({},{__mode="k"})
+    local orders=setmetatable({},{__mode=&quot;k&quot;})
     local function connect(event,fn) local c=event:Connect(fn);table.insert(connections,c);return c end
     local function make(class,props,parent)
         local node=Instance.new(class);for key,value in pairs(props) do node[key]=value end
-        if parent and node:IsA("GuiObject") and props.LayoutOrder==nil then orders[parent]=(orders[parent] or 0)+1;node.LayoutOrder=orders[parent] end
+        if parent and node:IsA(&quot;GuiObject&quot;) and props.LayoutOrder==nil then orders[parent]=(orders[parent] or 0)+1;node.LayoutOrder=orders[parent] end
         node.Parent=parent;return node
     end
-    local function round(node,r) make("UICorner",{CornerRadius=UDim.new(0,r or 10)},node) end
+    local function round(node,r) make(&quot;UICorner&quot;,{CornerRadius=UDim.new(0,r or 10)},node) end
     local function animate(node,props,t)
         if cfg.ReduceMotion then for key,value in pairs(props) do node[key]=value end;return end
         Tween:Create(node,TweenInfo.new(t or 0.17,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),props):Play()
     end
     local function text(parent,value,size,color,position,dimensions,bold)
-        return make("TextLabel",{Text=value,TextSize=size,TextColor3=color or C.Text,Font=bold and Enum.Font.GothamBold or Enum.Font.Gotham,
+        return make(&quot;TextLabel&quot;,{Text=value,TextSize=size,TextColor3=color or C.Text,Font=bold and Enum.Font.GothamBold or Enum.Font.Gotham,
             Position=position or UDim2.new(),Size=dimensions or UDim2.new(1,0,0,20),BackgroundTransparency=1,TextXAlignment=Enum.TextXAlignment.Left},parent)
     end
     local function hover(button)
-        local scale=make("UIScale",{Scale=1},button)
+        local scale=make(&quot;UIScale&quot;,{Scale=1},button)
         connect(button.MouseEnter,function() animate(scale,{Scale=1.025},0.14) end)
         connect(button.MouseLeave,function() animate(scale,{Scale=1},0.16) end)
         connect(button.InputBegan,function(input)
@@ -1915,63 +1920,67 @@ return function(ctx)
             end
         end)
     end
-    local window=make("Frame",{Name="Panel",AnchorPoint=Vector2.new(0.5,0.5),Position=UDim2.fromScale(0.5,0.5),Size=UDim2.fromOffset(680,470),BackgroundTransparency=1},gui)
-    local fit=make("UIScale",{Scale=1},window)
-    local surface=make("CanvasGroup",{Size=UDim2.fromScale(1,1),BackgroundColor3=C.Base,BorderSizePixel=0,GroupTransparency=1},window);round(surface,15)
-    make("UIStroke",{Color=C.Line,Thickness=1},surface)
-    local opening=make("UIScale",{Scale=0.96},surface)
-    local top=make("Frame",{Name="Handle",Active=true,Size=UDim2.new(1,0,0,64),BackgroundTransparency=1},surface)
-    local logoFallback=text(top,"R",25,C.Text,UDim2.fromOffset(18,17),UDim2.fromOffset(30,30),true)
-    local logo=make("ImageLabel",{Position=UDim2.fromOffset(18,17),Size=UDim2.fromOffset(30,30),BackgroundTransparency=1},top);ctx.Brand.Apply(logo,logoFallback)
-    text(top,"RIFT HUB",15,C.Text,UDim2.fromOffset(61,12),UDim2.new(1,-155,0,23),true)
-    text(top,"SUPERHERO ARENA",9,C.Accent,UDim2.fromOffset(62,36),UDim2.new(1,-150,0,16),true)
-    local seam=make("Frame",{Position=UDim2.new(0,16,0,63),Size=UDim2.new(1,-32,0,1),BackgroundColor3=C.Accent,BackgroundTransparency=0.45,BorderSizePixel=0},surface)
-    make("UIGradient",{Color=ColorSequence.new(C.Accent,C.Line)},seam)
+    local window=make(&quot;Frame&quot;,{Name=&quot;Panel&quot;,AnchorPoint=Vector2.new(0.5,0.5),Position=UDim2.fromScale(0.5,0.5),Size=UDim2.fromOffset(680,470),BackgroundTransparency=1},gui)
+    local fit=make(&quot;UIScale&quot;,{Scale=1},window)
+    local surface=make(&quot;CanvasGroup&quot;,{Size=UDim2.fromScale(1,1),BackgroundColor3=C.Base,BorderSizePixel=0,GroupTransparency=1},window);round(surface,15)
+    make(&quot;UIStroke&quot;,{Color=C.Line,Thickness=1},surface)
+    make(&quot;UIGradient&quot;,{Rotation=75,Color=ColorSequence.new(C.Base,Color3.fromRGB(23,24,40))},surface)
+    local opening=make(&quot;UIScale&quot;,{Scale=0.96},surface)
+    local top=make(&quot;Frame&quot;,{Name=&quot;Handle&quot;,Active=true,Size=UDim2.new(1,0,0,64),BackgroundTransparency=1},surface)
+    local logoFallback=text(top,&quot;R&quot;,25,C.Text,UDim2.fromOffset(18,17),UDim2.fromOffset(30,30),true)
+    local logo=make(&quot;ImageLabel&quot;,{Position=UDim2.fromOffset(18,17),Size=UDim2.fromOffset(30,30),BackgroundTransparency=1},top);ctx.Brand.Apply(logo,logoFallback)
+    text(top,&quot;RIFT HUB&quot;,15,C.Text,UDim2.fromOffset(61,12),UDim2.new(1,-155,0,23),true)
+    text(top,&quot;SUPERHERO ARENA&quot;,9,C.Accent,UDim2.fromOffset(62,36),UDim2.new(1,-150,0,16),true)
+    local seam=make(&quot;Frame&quot;,{Position=UDim2.new(0,16,0,63),Size=UDim2.new(1,-32,0,1),BackgroundColor3=C.Accent,BackgroundTransparency=0.45,BorderSizePixel=0},surface)
+    make(&quot;UIGradient&quot;,{Color=ColorSequence.new(C.Accent,C.Line)},seam)
     local function headerButton(name,glyph,x)
-        local b=make("TextButton",{Name=name,Position=UDim2.new(1,x,0,18),Size=UDim2.fromOffset(28,28),Text=glyph,TextSize=20,
+        local b=make(&quot;TextButton&quot;,{Name=name,Position=UDim2.new(1,x,0,18),Size=UDim2.fromOffset(28,28),Text=glyph,TextSize=20,
             Font=Enum.Font.Gotham,TextColor3=C.Sub,BackgroundColor3=C.Panel,BorderSizePixel=0,AutoButtonColor=false},top);round(b,8);hover(b);return b
     end
-    local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
-    local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
-    local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.9",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
-    local pages,tabs,selected={},{},"combat"
+    local close=headerButton(&quot;Close&quot;,&quot;×&quot;,-43);local minimize=headerButton(&quot;Minimize&quot;,&quot;−&quot;,-78)
+    local side=make(&quot;Frame&quot;,{Name=&quot;Sidebar&quot;,Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
+    local content=make(&quot;Frame&quot;,{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
+    local footer=text(surface,&quot;N0VA_0100  /  RIFT 6.0&quot;,9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local marker=make(&quot;Frame&quot;,{Position=UDim2.fromOffset(0,24),Size=UDim2.fromOffset(3,22),BackgroundColor3=C.Accent,BorderSizePixel=0},side);round(marker,2)
+    local pages,tabs,selected={},{},&quot;combat&quot;
     local function select(id)
         selected=id
+        local index=({combat=1,movement=2,visuals=3,settings=4})[id] or 1
+        animate(marker,{Position=UDim2.fromOffset(0,24+(index-1)*45)},0.22)
         for key,page in pairs(pages) do
             page.Visible=key==id
             if key==id then page.GroupTransparency=cfg.ReduceMotion and 0 or 1;animate(page,{GroupTransparency=0},0.22) end
         end
         for key,b in pairs(tabs) do animate(b,{BackgroundTransparency=key==id and 0 or 1,TextColor3=key==id and C.Accent or C.Sub}) end
     end
-    for i,entry in ipairs({{"combat","Combat"},{"visuals","Visuals"},{"settings","Settings"}}) do
+    for i,entry in ipairs({{&quot;combat&quot;,&quot;Combat&quot;},{&quot;movement&quot;,&quot;Movement&quot;},{&quot;visuals&quot;,&quot;Visuals&quot;},{&quot;settings&quot;,&quot;Settings&quot;}}) do
         local id,title=entry[1],entry[2]
-        local tab=make("TextButton",{Name="Tab_"..id,Position=UDim2.fromOffset(10,17+(i-1)*45),Size=UDim2.new(1,-20,0,36),Text="  "..title,
+        local tab=make(&quot;TextButton&quot;,{Name=&quot;Tab_&quot;..id,Position=UDim2.fromOffset(10,17+(i-1)*45),Size=UDim2.new(1,-20,0,36),Text=&quot;  &quot;..title,
             Font=Enum.Font.GothamBold,TextSize=12,TextXAlignment=Enum.TextXAlignment.Left,BackgroundColor3=C.Raised,TextColor3=C.Sub,BorderSizePixel=0,AutoButtonColor=false},side);round(tab,8);hover(tab);tabs[id]=tab
         connect(tab.Activated,function() select(id) end)
-        local page=make("CanvasGroup",{Name="Page_"..id,Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Visible=false},content)
-        local scroll=make("ScrollingFrame",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=3,
+        local page=make(&quot;CanvasGroup&quot;,{Name=&quot;Page_&quot;..id,Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Visible=false},content)
+        local scroll=make(&quot;ScrollingFrame&quot;,{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=3,
             ScrollBarImageColor3=C.Line,CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y},page)
-        make("UIPadding",{PaddingLeft=UDim.new(0,16),PaddingRight=UDim.new(0,16),PaddingTop=UDim.new(0,16),PaddingBottom=UDim.new(0,16)},scroll)
-        make("UIListLayout",{SortOrder=Enum.SortOrder.LayoutOrder,Padding=UDim.new(0,12)},scroll)
-        text(scroll,title,23,C.Text,nil,UDim2.new(1,0,0,34),true);pages[id]=page;page:SetAttribute("TabId",id)
+        make(&quot;UIPadding&quot;,{PaddingLeft=UDim.new(0,16),PaddingRight=UDim.new(0,16),PaddingTop=UDim.new(0,16),PaddingBottom=UDim.new(0,16)},scroll)
+        make(&quot;UIListLayout&quot;,{SortOrder=Enum.SortOrder.LayoutOrder,Padding=UDim.new(0,12)},scroll)
+        text(scroll,title,23,C.Text,nil,UDim2.new(1,0,0,34),true);pages[id]=page;page:SetAttribute(&quot;TabId&quot;,id)
         M[id]=scroll
     end
     local function section(parent,title,description)
-        local box=make("Frame",{Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.Panel,BorderSizePixel=0},parent);round(box,11)
-        make("UIStroke",{Color=C.Line,Transparency=0.4},box)
-        make("UIPadding",{PaddingLeft=UDim.new(0,14),PaddingRight=UDim.new(0,14),PaddingTop=UDim.new(0,12),PaddingBottom=UDim.new(0,12)},box)
-        make("UIListLayout",{Padding=UDim.new(0,8),SortOrder=Enum.SortOrder.LayoutOrder},box)
+        local box=make(&quot;Frame&quot;,{Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.Panel,BorderSizePixel=0},parent);round(box,11)
+        make(&quot;UIStroke&quot;,{Color=C.Line,Transparency=0.4},box)
+        make(&quot;UIPadding&quot;,{PaddingLeft=UDim.new(0,14),PaddingRight=UDim.new(0,14),PaddingTop=UDim.new(0,12),PaddingBottom=UDim.new(0,12)},box)
+        make(&quot;UIListLayout&quot;,{Padding=UDim.new(0,8),SortOrder=Enum.SortOrder.LayoutOrder},box)
         text(box,title,13,C.Text,nil,UDim2.new(1,0,0,22),true)
         if description then local note=text(box,description,11,C.Sub,nil,UDim2.new(1,0,0,0));note.TextWrapped=true;note.AutomaticSize=Enum.AutomaticSize.Y end
         return box
     end
     local paints={};local sliderDrag
     local function toggle(parent,key,title)
-        local b=make("TextButton",{Name=key,Size=UDim2.new(1,0,0,40),BackgroundTransparency=1,Text="",AutoButtonColor=false,BorderSizePixel=0},parent);hover(b)
+        local b=make(&quot;TextButton&quot;,{Name=key,Size=UDim2.new(1,0,0,40),BackgroundTransparency=1,Text=&quot;&quot;,AutoButtonColor=false,BorderSizePixel=0},parent);hover(b)
         local caption=text(b,title,12,C.Text,UDim2.fromOffset(0,7),UDim2.new(1,-52,0,28),true);caption.TextWrapped=true
-        local track=make("Frame",{AnchorPoint=Vector2.new(1,0.5),Position=UDim2.new(1,0,0.5,0),Size=UDim2.fromOffset(36,20),BackgroundColor3=C.Line,BorderSizePixel=0},b);round(track,12)
-        local knob=make("Frame",{Size=UDim2.fromOffset(14,14),Position=UDim2.fromOffset(3,3),BackgroundColor3=C.Sub,BorderSizePixel=0},track);round(knob,8)
+        local track=make(&quot;Frame&quot;,{AnchorPoint=Vector2.new(1,0.5),Position=UDim2.new(1,0,0.5,0),Size=UDim2.fromOffset(36,20),BackgroundColor3=C.Line,BorderSizePixel=0},b);round(track,12)
+        local knob=make(&quot;Frame&quot;,{Size=UDim2.fromOffset(14,14),Position=UDim2.fromOffset(3,3),BackgroundColor3=C.Sub,BorderSizePixel=0},track);round(knob,8)
         local previous
         local function paint()
             if previous==cfg[key] then return end;previous=cfg[key]
@@ -1982,21 +1991,21 @@ return function(ctx)
         return b
     end
     local function slider(parent,key,title,minimum,maximum,percent)
-        local row=make("Frame",{Name=key,Size=UDim2.new(1,0,0,51),BackgroundTransparency=1},parent)
+        local row=make(&quot;Frame&quot;,{Name=key,Size=UDim2.new(1,0,0,51),BackgroundTransparency=1},parent)
         text(row,title,12,C.Text,nil,UDim2.new(1,-50,0,20),true)
-        local value=text(row,"",11,C.Accent,UDim2.new(1,-50,0,0),UDim2.fromOffset(50,20),true);value.TextXAlignment=Enum.TextXAlignment.Right
-        local hit=make("TextButton",{Position=UDim2.fromOffset(0,22),Size=UDim2.new(1,0,0,26),Text="",BackgroundTransparency=1,AutoButtonColor=false},row)
-        local track=make("Frame",{Position=UDim2.fromOffset(0,10),Size=UDim2.new(1,0,0,4),BackgroundColor3=C.Line,BorderSizePixel=0},hit);round(track,3)
-        local fill=make("Frame",{Size=UDim2.fromScale(0,1),BackgroundColor3=C.Accent,BorderSizePixel=0},track);round(fill,3)
-        local knob=make("Frame",{AnchorPoint=Vector2.new(0.5,0.5),Size=UDim2.fromOffset(11,11),BackgroundColor3=C.Text,BorderSizePixel=0},track);round(knob,7)
+        local value=text(row,&quot;&quot;,11,C.Accent,UDim2.new(1,-50,0,0),UDim2.fromOffset(50,20),true);value.TextXAlignment=Enum.TextXAlignment.Right
+        local hit=make(&quot;TextButton&quot;,{Position=UDim2.fromOffset(0,22),Size=UDim2.new(1,0,0,26),Text=&quot;&quot;,BackgroundTransparency=1,AutoButtonColor=false},row)
+        local track=make(&quot;Frame&quot;,{Position=UDim2.fromOffset(0,10),Size=UDim2.new(1,0,0,4),BackgroundColor3=C.Line,BorderSizePixel=0},hit);round(track,3)
+        local fill=make(&quot;Frame&quot;,{Size=UDim2.fromScale(0,1),BackgroundColor3=C.Accent,BorderSizePixel=0},track);round(fill,3)
+        local knob=make(&quot;Frame&quot;,{AnchorPoint=Vector2.new(0.5,0.5),Size=UDim2.fromOffset(11,11),BackgroundColor3=C.Text,BorderSizePixel=0},track);round(knob,7)
         local function paint()
             local a=(cfg[key]-minimum)/(maximum-minimum);fill.Size=UDim2.fromScale(a,1);knob.Position=UDim2.fromScale(a,0.5)
-            value.Text=percent and tostring(math.floor(cfg[key]*100)).."%" or tostring(math.floor(cfg[key]))
+            value.Text=percent and tostring(math.floor(cfg[key]*100))..&quot;%&quot; or maximum&lt;1 and string.format(&quot;%.2fs&quot;,cfg[key]) or tostring(math.floor(cfg[key]))
         end
         local function update(x)
             if track.AbsoluteSize.X&lt;=0 then return end
             local a=math.clamp((x-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1);local v=minimum+(maximum-minimum)*a
-            API.SetOption(key,percent and v or math.floor(v+0.5))
+            API.SetOption(key,(percent or maximum&lt;1) and v or math.floor(v+0.5))
         end
         table.insert(paints,paint);paint()
         connect(hit.InputBegan,function(input)
@@ -2005,53 +2014,63 @@ return function(ctx)
         return row
     end
     local function button(parent,name,title,fn)
-        local b=make("TextButton",{Name=name,Text=title,Size=UDim2.new(1,0,0,37),Font=Enum.Font.GothamBold,TextSize=12,
+        local b=make(&quot;TextButton&quot;,{Name=name,Text=title,Size=UDim2.new(1,0,0,37),Font=Enum.Font.GothamBold,TextSize=12,
             TextColor3=C.Text,BackgroundColor3=C.Raised,AutoButtonColor=false,BorderSizePixel=0},parent);round(b,8);hover(b);connect(b.Activated,fn);return b
     end
-    local farm=section(M.combat,"AUTO FARM","Automatically selects opponents, moves into position, and requests your hero’s available attacks and abilities.")
-    local play=make("TextButton",{Name="Play",Size=UDim2.new(1,0,0,43),Text="PLAY",Font=Enum.Font.GothamBold,TextSize=13,
+    local farm=section(M.combat,&quot;AUTO FARM&quot;,&quot;Automatically selects opponents, moves into position, and requests your hero’s available attacks and abilities.&quot;)
+    local play=make(&quot;TextButton&quot;,{Name=&quot;Play&quot;,Size=UDim2.new(1,0,0,43),Text=&quot;PLAY&quot;,Font=Enum.Font.GothamBold,TextSize=13,
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
-    local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
+    local status=text(farm,&quot;Off&quot;,11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name=&quot;Status&quot;;status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
-    local defense=section(M.combat,"ULTRA INSTINCT","Teleport mode makes one capped local relocation on a detected nearby attack. Hidden damage bounds are estimated. The server can correct the move; avoiding every ability is not guaranteed.")
-    toggle(defense,"UltraInstinct","Enable Ultra Instinct")
-    toggle(defense,"TeleportDodge","Teleport dodge")
-    local walkToggle=toggle(defense,"FastSidestep","Fast sidestep (walking mode)")
-    local walkSpeed=slider(defense,"InstinctBurstSpeed","Burst speed",24,96)
-    slider(defense,"InstinctRange","Nearby attack range",6,24)
-    slider(defense,"InstinctMaxDistance","Escape distance",4,12)
-    local instinct=text(defense,"Off",11,C.Accent,nil,UDim2.new(1,0,0,60));instinct.TextWrapped=true
-    local testEscape=button(defense,"TestDodge","Test escape",function()
-        local ok,reason=API.Instinct.TestDodge();footer.Text=ok and "Escape requested · see report" or (reason or "Test blocked")
+    local attacks=section(M.combat,&quot;FAST ATTACK&quot;,&quot;Requests basic attacks through the detected game control. Game cooldowns and attack locks still apply.&quot;)
+    toggle(attacks,&quot;FastAttack&quot;,&quot;Fast Attack&quot;)
+    local requestStatus=text(attacks,&quot;Ready&quot;,10,C.Sub,nil,UDim2.new(1,0,0,24));requestStatus.TextWrapped=true
+    slider(attacks,&quot;AttackDelay&quot;,&quot;Request interval (seconds)&quot;,0.15,0.6)
+    local safety=section(M.combat,&quot;LOW HEALTH RETREAT&quot;,&quot;Walks toward a checked nearby escape point when health is low. Pauses Auto Farm while retreating; your joystick always takes priority.&quot;)
+    toggle(safety,&quot;AutoSafeTeleport&quot;,&quot;Auto retreat at low health&quot;)
+    slider(safety,&quot;SafeHealthThreshold&quot;,&quot;Health threshold (%)&quot;,10,60)
+    local movement=section(M.movement,&quot;MOVEMENT SPEED&quot;,&quot;Applies your chosen walking speed once. If the game changes it, Rift preserves the game value. Turn off to restore the original speed.&quot;)
+    toggle(movement,&quot;SpeedEnabled&quot;,&quot;Enable custom WalkSpeed&quot;)
+    slider(movement,&quot;WalkSpeed&quot;,&quot;WalkSpeed&quot;,16,80)
+    local defense=section(M.combat,&quot;ULTRA INSTINCT&quot;,&quot;Teleport mode makes one capped local relocation on a detected nearby attack. Hidden damage bounds are estimated. The server can correct the move; avoiding every ability is not guaranteed.&quot;)
+    toggle(defense,&quot;UltraInstinct&quot;,&quot;Enable Ultra Instinct&quot;)
+    toggle(defense,&quot;TeleportDodge&quot;,&quot;Teleport dodge&quot;)
+    local walkToggle=toggle(defense,&quot;FastSidestep&quot;,&quot;Fast sidestep (walking mode)&quot;)
+    local walkSpeed=slider(defense,&quot;InstinctBurstSpeed&quot;,&quot;Burst speed&quot;,24,96)
+    slider(defense,&quot;InstinctRange&quot;,&quot;Nearby attack range&quot;,6,24)
+    slider(defense,&quot;InstinctMaxDistance&quot;,&quot;Escape distance&quot;,4,12)
+    local instinct=text(defense,&quot;Off&quot;,11,C.Accent,nil,UDim2.new(1,0,0,60));instinct.TextWrapped=true
+    local testEscape=button(defense,&quot;TestDodge&quot;,&quot;Test escape&quot;,function()
+        local ok,reason=API.Instinct.TestDodge();footer.Text=ok and &quot;Escape requested · see report&quot; or (reason or &quot;Test blocked&quot;)
     end)
-    local nativeTest=button(defense,"TestNativeDash","Test game dash",function()
-        local ok,reason=API.Instinct.TestDodge(true);footer.Text=ok and "Native dash input requested · see report" or (reason or "Dash unavailable")
+    local nativeTest=button(defense,&quot;TestNativeDash&quot;,&quot;Test game dash&quot;,function()
+        local ok,reason=API.Instinct.TestDodge(true);footer.Text=ok and &quot;Native dash input requested · see report&quot; or (reason or &quot;Dash unavailable&quot;)
     end)
-    button(defense,"RecordDodge","Record nearby attacks · 10 sec",function()
-        API.Instinct.RecordEncounter();footer.Text="Recording nearby attacks for 10 seconds"
+    button(defense,&quot;RecordDodge&quot;,&quot;Record nearby attacks · 10 sec&quot;,function()
+        API.Instinct.RecordEncounter();footer.Text=&quot;Recording nearby attacks for 10 seconds&quot;
     end)
-    button(defense,"CopyDodgeReport","Copy dodge report",function()
-        local _,copied=API.CopyDodgeReport();footer.Text=copied and "Dodge report copied" or "Dodge report printed in console"
+    button(defense,&quot;CopyDodgeReport&quot;,&quot;Copy dodge report&quot;,function()
+        local _,copied=API.CopyDodgeReport();footer.Text=copied and &quot;Dodge report copied&quot; or &quot;Dodge report printed in console&quot;
     end)
-    local esp=section(M.visuals,"PLAYER ESP","Hero-colored chams, role above username. No boxes, tracers, distances or health bars.")
-    toggle(esp,"ESP","Enable player ESP");toggle(esp,"Chams","Chams");toggle(esp,"Roles","Hero role");toggle(esp,"Names","Usernames")
-    slider(esp,"ChamOpacity","Cham opacity",0,1,true)
-    local identity=section(M.visuals,"HERO IDENTIFICATION","Confirmed mappings take priority. Estimated names are labelled; unmapped game IDs stay visible.")
-    toggle(identity,"GuessRoles","Estimate unmapped roles")
-    local settings=section(M.settings,"INTERFACE","Drag the header to move. Minimize to the Rift emblem; tap it to reopen. RightShift also toggles the window.")
-    toggle(settings,"ReduceMotion","Reduce motion")
-    local tools=section(M.settings,"SESSION")
-    button(tools,"CopyReport","Copy diagnostics",function() local _,copied=API.CopyDiagnostics();footer.Text=copied and "Diagnostics copied" or "Diagnostics printed in console" end)
-    button(tools,"Rejoin","Rejoin server",function()
-        local p=game:GetService("Players").LocalPlayer;local t=game:GetService("TeleportService")
-        if game.JobId~="" then t:TeleportToPlaceInstance(game.PlaceId,game.JobId,p) else t:Teleport(game.PlaceId,p) end
+    local esp=section(M.visuals,&quot;PLAYER ESP&quot;,&quot;Hero-colored chams, role above username. No boxes, tracers, distances or health bars.&quot;)
+    toggle(esp,&quot;ESP&quot;,&quot;Enable player ESP&quot;);toggle(esp,&quot;Chams&quot;,&quot;Chams&quot;);toggle(esp,&quot;Roles&quot;,&quot;Hero role&quot;);toggle(esp,&quot;Names&quot;,&quot;Usernames&quot;)
+    slider(esp,&quot;ChamOpacity&quot;,&quot;Cham opacity&quot;,0,1,true)
+    local identity=section(M.visuals,&quot;HERO IDENTIFICATION&quot;,&quot;Confirmed mappings take priority. Estimated names are labelled; unmapped game IDs stay visible.&quot;)
+    toggle(identity,&quot;GuessRoles&quot;,&quot;Estimate unmapped roles&quot;)
+    local settings=section(M.settings,&quot;INTERFACE&quot;,&quot;Drag the header to move. Minimize to the Rift emblem; tap it to reopen. RightShift also toggles the window.&quot;)
+    toggle(settings,&quot;ReduceMotion&quot;,&quot;Reduce motion&quot;)
+    local tools=section(M.settings,&quot;SESSION&quot;)
+    button(tools,&quot;CopyReport&quot;,&quot;Copy diagnostics&quot;,function() local _,copied=API.CopyDiagnostics();footer.Text=copied and &quot;Diagnostics copied&quot; or &quot;Diagnostics printed in console&quot; end)
+    button(tools,&quot;Rejoin&quot;,&quot;Rejoin server&quot;,function()
+        local p=game:GetService(&quot;Players&quot;).LocalPlayer;local t=game:GetService(&quot;TeleportService&quot;)
+        if game.JobId~=&quot;&quot; then t:TeleportToPlaceInstance(game.PlaceId,game.JobId,p) else t:Teleport(game.PlaceId,p) end
     end)
-    button(tools,"Unload","Unload Rift Hub",API.Unload)
-    text(M.settings,"Rift Hub · N0VA_0100",11,C.Sub,nil,UDim2.new(1,0,0,24))
-    local bubble=make("TextButton",{Name="Restore",Text="R",AnchorPoint=Vector2.new(),Position=UDim2.fromOffset(18,150),Size=UDim2.fromOffset(48,48),TextSize=24,
+    button(tools,&quot;Unload&quot;,&quot;Unload Rift Hub&quot;,API.Unload)
+    text(M.settings,&quot;Rift Hub · N0VA_0100&quot;,11,C.Sub,nil,UDim2.new(1,0,0,24))
+    local bubble=make(&quot;TextButton&quot;,{Name=&quot;Restore&quot;,Text=&quot;R&quot;,AnchorPoint=Vector2.new(),Position=UDim2.fromOffset(18,150),Size=UDim2.fromOffset(48,48),TextSize=24,
         Font=Enum.Font.GothamBold,TextColor3=C.Text,BackgroundColor3=C.Base,BorderSizePixel=0,AutoButtonColor=false,Visible=false},gui);round(bubble,13);hover(bubble)
-    make("UIStroke",{Color=C.Accent,Transparency=0.3},bubble)
-    local miniLogo=make("ImageLabel",{Position=UDim2.fromOffset(8,8),Size=UDim2.fromOffset(32,32),BackgroundTransparency=1},bubble);ctx.Brand.Apply(miniLogo,bubble)
+    make(&quot;UIStroke&quot;,{Color=C.Accent,Transparency=0.3},bubble)
+    local miniLogo=make(&quot;ImageLabel&quot;,{Position=UDim2.fromOffset(8,8),Size=UDim2.fromOffset(32,32),BackgroundTransparency=1},bubble);ctx.Brand.Apply(miniLogo,bubble)
     local minimized=false
     local function minimizeTo(on) minimized=on;window.Visible=not on;bubble.Visible=on end
     connect(minimize.Activated,function() minimizeTo(true) end)
@@ -2098,49 +2117,144 @@ return function(ctx)
             footer.Position=UDim2.new(0,sideWidth+15,1,-23);footer.Size=UDim2.new(1,-sideWidth-30,0,18);window.Position=UDim2.fromScale(0.5,0.5)
         end
         for _,paint in ipairs(paints) do paint() end
-        play.Text=API.Enabled and "STOP" or "PLAY"
+        play.Text=API.Enabled and &quot;STOP&quot; or &quot;PLAY&quot;
         play.BackgroundColor3=API.Enabled and Color3.fromRGB(99,52,70) or C.Accent;play.TextColor3=API.Enabled and C.Text or C.Base
         walkToggle.Visible=not cfg.TeleportDodge;walkSpeed.Visible=not cfg.TeleportDodge;nativeTest.Visible=not cfg.TeleportDodge
-        testEscape.Text=cfg.TeleportDodge and "Test teleport" or "Test sidestep"
-        status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.AutomaticMoves.." automatic · "..API.Instinct.TestMoves.." tests"..(API.Instinct.Recording and " · RECORDING" or "")..(not cfg.TeleportDodge and API.Instinct.BurstRejected and " · boost overridden by game" or "")
+        testEscape.Text=cfg.TeleportDodge and &quot;Test teleport&quot; or &quot;Test sidestep&quot;
+        requestStatus.Text=API.Session and (API.Session.Status..&quot; · &quot;..API.Session.AttackRequests..&quot; basic requests&quot;) or &quot;Ready&quot;
+        status.Text=API.Status;instinct.Text=API.Instinct.Status..&quot;  ·  &quot;..API.Instinct.AutomaticMoves..&quot; automatic · &quot;..API.Instinct.TestMoves..&quot; tests&quot;..(API.Instinct.Recording and &quot; · RECORDING&quot; or &quot;&quot;)..(not cfg.TeleportDodge and API.Instinct.BurstRejected and &quot; · boost overridden by game&quot; or &quot;&quot;)
     end
     function M.Destroy()
         if dead then return end;dead=true;sliderDrag=nil;drag=nil
         for _,c in ipairs(connections) do c:Disconnect() end;table.clear(connections)
     end
-    M.Play=play;M.Status=status;M.SelectTab=select;M.Window=window;M.Step();select("combat")
+    M.Play=play;M.Status=status;M.SelectTab=select;M.Window=window;M.Step();select(&quot;combat&quot;)
     animate(surface,{GroupTransparency=0},0.25);animate(opening,{Scale=1},0.28)
     return M
 end
+
 end)()
 function API.SetOption(key,value)
     if not alive or Config[key]==nil or type(value)~=type(Config[key]) then return false end
-    if type(value)=="number" then
+    if type(value)==&quot;number&quot; then
         if value~=value or math.abs(value)==math.huge then return false end
-        local bounds={ChamOpacity={0,1},InstinctRange={6,24},InstinctMaxDistance={4,12},InstinctBurstSpeed={24,96}}
+        local bounds={AttackDelay={0.15,0.6},SafeHealthThreshold={10,60},WalkSpeed={16,80},ChamOpacity={0,1},InstinctRange={6,24},InstinctMaxDistance={4,12},InstinctBurstSpeed={24,96}}
         value=math.clamp(value,bounds[key][1],bounds[key][2])
     end
     Config[key]=value
-    if key=="FastSidestep" and not value or key=="TeleportDodge" then API.Instinct.Stop() end
-    if key=="UltraInstinct" then
+    if API.Session and (key==&quot;SpeedEnabled&quot; or key==&quot;AutoSafeTeleport&quot;) then API.Session.Reset() end
+    if key==&quot;FastSidestep&quot; and not value or key==&quot;TeleportDodge&quot; then API.Instinct.Stop() end
+    if key==&quot;UltraInstinct&quot; then
         if value then scan() else API.Instinct.Stop() end
     end
     API.Visuals.Step(0);API.Instinct.Step(0);if API.UI then API.UI.Step() end
     return true
 end
+local MakeSession=(function()
+-- Linked-script features adapted to Rift&#x27;s mobile control discovery and normal movement.
+return function(ctx)
+ local cfg=ctx.Config
+ local M={Retreating=false,Status=&quot;Ready&quot;,AttackRequests=0}
+ local speedHum,speedBase,speedApplied,speedRequest
+ local pausedRequest,elapsed,attackAt,scanAt,retryAt= nil,0,0,0,0
+ local retreatHum,retreatGoal,retreatUntil
+ local function restoreSpeed()
+  if speedHum and speedHum.WalkSpeed==speedApplied then speedHum.WalkSpeed=speedBase end
+  speedHum,speedBase,speedApplied,speedRequest=nil,nil,nil,nil
+ end
+ local function endRetreat()
+  if retreatHum then pcall(function() ctx.Resume(retreatHum) end) end
+  retreatHum,retreatGoal=nil,nil;M.Retreating=false
+ end
+ function M.Reset()
+  endRetreat();restoreSpeed();pausedRequest=nil
+ end
+ function M.Step(dt)
+  elapsed+=dt
+  local char,hum,root=ctx.Body()
+  local allowed=ctx.CanRun()
+  if not root or not hum or not allowed or root.Anchored or hum.PlatformStand or hum.Health&lt;=0 then
+   M.Reset();M.Status=&quot;Paused&quot;;return
+  end
+  local speedLocked=char:GetAttribute(&quot;canRun&quot;)==false or char:GetAttribute(&quot;LOCKED_INPUTS&quot;)==true or char:GetAttribute(&quot;cutsceneLock&quot;)==true
+  -- One write per requested speed. A game override wins until the user changes the setting.
+  if speedHum and (speedHum~=hum or speedHum.WalkSpeed~=speedApplied) then
+   pausedRequest=speedRequest;restoreSpeed();M.Status=&quot;Game changed speed · preserved&quot;
+  end
+  if not cfg.SpeedEnabled or speedLocked then restoreSpeed()
+  elseif pausedRequest~=cfg.WalkSpeed and (speedHum~=hum or speedRequest~=cfg.WalkSpeed) then
+   if speedHum~=hum then restoreSpeed();speedHum=hum;speedBase=hum.WalkSpeed end
+   speedRequest=cfg.WalkSpeed;speedApplied=speedRequest;hum.WalkSpeed=speedApplied
+  end
+  if not cfg.SpeedEnabled then pausedRequest=nil end
+  if ctx.Manual() then endRetreat();M.Status=&quot;Paused for your movement&quot;;return end
+  local health=hum.Health/math.max(1,hum.MaxHealth)*100
+  if M.Retreating then
+   if not cfg.AutoSafeTeleport or retreatHum~=hum or speedLocked or elapsed&gt;=retreatUntil or health&gt;=cfg.SafeHealthThreshold+10 or (retreatGoal-root.Position).Magnitude&lt;3 then
+    endRetreat();retryAt=elapsed+3
+   else hum:MoveTo(retreatGoal);M.Status=&quot;Low health · retreating&quot;;return end
+  end
+  if cfg.AutoSafeTeleport and not speedLocked and health&lt;=cfg.SafeHealthThreshold and elapsed&gt;=retryAt then
+   local threat=ctx.Nearest(root,40)
+   local other
+   if threat then other=select(3,ctx.Body(threat)) end
+   if other then
+    local delta=Vector3.new(root.Position.X-other.Position.X,0,root.Position.Z-other.Position.Z)
+    if delta.Magnitude&gt;.1 then
+     local away=delta.Unit;local side=Vector3.new(-away.Z,0,away.X)
+     for _,direction in ipairs({away,(away+side).Unit,(away-side).Unit,side,side*-1}) do
+      local goal=root.Position+direction*16
+      if ctx.Safe(root,goal) then
+       ctx.StopFarmMovement();retreatHum,retreatGoal,retreatUntil=hum,goal,elapsed+2.5
+       M.Retreating=true;hum:MoveTo(goal);M.Status=&quot;Low health · retreating&quot;;return
+      end
+     end
+    end
+   end
+   retryAt=elapsed+1;M.Status=&quot;Low health · no clear retreat path&quot;
+  end
+  -- While Auto Farm is active its combo scheduler owns attack requests.
+  if cfg.FastAttack and not ctx.Farming() and elapsed&gt;=attackAt and not speedLocked
+   and char:GetAttribute(&quot;canAttack&quot;)~=false and char:GetAttribute(&quot;busy&quot;)~=true then
+   attackAt=elapsed+cfg.AttackDelay
+   if elapsed&gt;=scanAt then ctx.Scan();scanAt=elapsed+1 end
+   local target=ctx.Nearest(root,8)
+   local targetChar,targetRoot
+   if target then targetChar,_,targetRoot=ctx.Body(target) end
+   if targetRoot and ctx.Sight(root.Position,targetRoot.Position,targetChar) then
+    local ok,reason=ctx.Attack(targetRoot)
+    if ok then M.AttackRequests+=1;M.Status=&quot;Basic attack requested&quot;
+    else M.Status=reason or &quot;Attack input unavailable&quot; end
+   end
+  end
+ end
+ function M.Steer()
+  if M.Retreating and retreatHum and retreatGoal then
+   local root=retreatHum.Parent and retreatHum.Parent:FindFirstChild(&quot;HumanoidRootPart&quot;)
+   if root then
+    local delta=retreatGoal-root.Position
+    retreatHum:Move(delta.Magnitude&gt;.5 and delta.Unit or Vector3.new(),false)
+   end
+  end
+ end
+ M.Destroy=M.Reset
+ return M
+end
+
+end)()
 local started,startError=pcall(function()
     API.Visuals=MakeVisuals({Config=Config,Gui=gui,Body=body})
     API.ResolveHero=API.Visuals.Resolve
     API.Instinct=MakeInstinct({Config=Config,Body=body,Opposing=opposing,Sight=lineOfSight,ManualMovement=manualMovement,ResumeMovement=resumeUserMovement,MovementIntent=movementIntent,NativeDash=defensiveDash,
         CanRun=function()
             local camera=workspace.CurrentCamera
-            if not alive then return false,"Hub unloaded" end
-            if not focused then return false,"Window not focused" end
-            if dragging then return false,"Dragging hub" end
-            if Input:GetFocusedTextBox() then return false,"Typing" end
-            if not camera then return false,"Camera missing" end
-            if camera.CameraType==Enum.CameraType.Scriptable then return false,"Scripted camera / cutscene" end
-            return true,"Ready"
+            if not alive then return false,&quot;Hub unloaded&quot; end
+            if not focused then return false,&quot;Window not focused&quot; end
+            if dragging then return false,&quot;Dragging hub&quot; end
+            if Input:GetFocusedTextBox() then return false,&quot;Typing&quot; end
+            if not camera then return false,&quot;Camera missing&quot; end
+            if camera.CameraType==Enum.CameraType.Scriptable then return false,&quot;Scripted camera / cutscene&quot; end
+            return true,&quot;Ready&quot;
         end,
         Safe=function(root,goal,targetChar,boxes)
             local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude;params.RespectCanCollide=true
@@ -2149,11 +2263,11 @@ local started,startError=pcall(function()
             for _,box in ipairs(boxes or {}) do table.insert(ignored,box.Part) end
             params.FilterDescendantsInstances=ignored
             local floor=workspace:Raycast(goal+Vector3.new(0,2,0),Vector3.new(0,-9,0),params)
-            if not floor then return false,"No ground below destination" end
-            if floor.Normal and floor.Normal.Y&lt;0.5 then return false,"Destination ground is too steep" end
+            if not floor then return false,&quot;No ground below destination&quot; end
+            if floor.Normal and floor.Normal.Y&lt;0.5 then return false,&quot;Destination ground is too steep&quot; end
             local ok,hit=pcall(function() return workspace:Blockcast(root.CFrame,Vector3.new(2.4,4,2.4),goal-root.Position,params) end)
-            if not ok then return false,"Blockcast failed: "..tostring(hit) end
-            if hit then return false,"Path blocked by "..hit.Instance:GetFullName() end
+            if not ok then return false,&quot;Blockcast failed: &quot;..tostring(hit) end
+            if hit then return false,&quot;Path blocked by &quot;..hit.Instance:GetFullName() end
             local clear=true;local obstacle
             local overlapOK,overlapError=pcall(function()
                 local overlap=OverlapParams.new();overlap.FilterType=Enum.RaycastFilterType.Exclude;overlap.FilterDescendantsInstances=ignored;overlap.RespectCanCollide=true;overlap.MaxParts=12
@@ -2161,8 +2275,29 @@ local started,startError=pcall(function()
                     if part.CanCollide then clear=false;obstacle=part:GetFullName();break end
                 end
             end)
-            if not overlapOK then return false,"Destination query failed: "..tostring(overlapError) end
-            return clear,clear and nil or ("Destination blocked by "..tostring(obstacle))
+            if not overlapOK then return false,&quot;Destination query failed: &quot;..tostring(overlapError) end
+            return clear,clear and nil or (&quot;Destination blocked by &quot;..tostring(obstacle))
+        end,
+    })
+    API.Session=MakeSession({Config=Config,Body=function(plr) return body(plr or LocalPlayer) end,
+        CanRun=function() return alive and focused and not dragging and not Input:GetFocusedTextBox() end,Manual=manualMovement,
+        Farming=function() return API.Enabled end,Scan=scan,Sight=lineOfSight,Safe=safeLocalMove,
+        Resume=resumeUserMovement,StopFarmMovement=function() reset() end,
+        Nearest=function(root,range)
+            local best,distance=nil,range
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if opposing(plr) then local _,_,other=body(plr);if other then
+                    local d=(other.Position-root.Position).Magnitude
+                    if d&lt;distance then best,distance=plr,d end
+                end end
+            end
+            return best
+        end,
+        Attack=function(targetRoot)
+            local camera=workspace.CurrentCamera;if not camera then return false,&quot;Camera missing&quot; end
+            local point,onScreen=camera:WorldToViewportPoint(targetRoot.Position)
+            if not onScreen or point.Z&lt;=0 then return false,&quot;Face a nearby target to attack&quot; end
+            return primary(point)
         end,
     })
     API.UI=MakeInterface({API=API,Config=Config,Gui=gui,Brand=Brand,
@@ -2173,7 +2308,7 @@ local started,startError=pcall(function()
     playButton=API.UI.Play;statusLabel=API.UI.Status
     API.Visuals.Step(0)
 end)
-if not started then API.Unload();error("[Rift SHA] startup: "..tostring(startError),0) end
+if not started then API.Unload();error(&quot;[Rift SHA] startup: &quot;..tostring(startError),0) end
 connect(gui.Destroying,function() if alive then API.Unload() end end)
 connect(Players.PlayerRemoving,function(plr) if API.Target==plr then reset() end end)
 local movementKeys={[Enum.KeyCode.W]=true,[Enum.KeyCode.A]=true,[Enum.KeyCode.S]=true,[Enum.KeyCode.D]=true,
@@ -2188,9 +2323,10 @@ end)
 connect(Input.InputEnded,function(input) if input.KeyCode then manualKeys[input.KeyCode]=nil end;manualTouches[input]=nil end)
 connect(Input.WindowFocusReleased,function() table.clear(manualKeys);table.clear(manualTouches) end)
 connect(Run.Heartbeat,API.Step)
-Run:BindToRenderStep("RiftAutoPlayAim",Enum.RenderPriority.Camera.Value+1,function(dt)
+Run:BindToRenderStep(&quot;RiftAutoPlayAim&quot;,Enum.RenderPriority.Camera.Value+1,function(dt)
     guarded(function()
-        if API.Instinct.Dodging then API.Instinct.Steer(dt)
+        if API.Session and API.Session.Retreating then API.Session.Steer()
+        elseif API.Instinct.Dodging then API.Instinct.Steer(dt)
         else steer(dt);faceBody(dt);aim(dt) end
     end)
 end)

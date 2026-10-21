@@ -62,8 +62,8 @@ return function(url)
 end
 end)()("https://raw.githubusercontent.com/copperpoppercms-sys/Rift-Hub-Superhero-Arena/main/assets/rift_logo.jpg")
 local function normalize(value) return type(value)=="string" and value:lower():gsub("[^%w]","") or "" end
-local API={Game="Superhero Arena",Version="5.9",Enabled=false,Target=nil,Status="Off"}
-local Config={ESP=true,Chams=true,Names=true,Roles=true,ChamOpacity=0.45,GuessRoles=true,
+local API={Game="Superhero Arena",Version="6.0",Enabled=false,Target=nil,Status="Off"}
+local Config={FastAttack=false,AttackDelay=0.2,AutoSafeTeleport=false,SafeHealthThreshold=30,SpeedEnabled=false,WalkSpeed=24,ESP=true,Chams=true,Names=true,Roles=true,ChamOpacity=0.45,GuessRoles=true,
     UltraInstinct=false,TeleportDodge=true,InstinctRange=24,InstinctMaxDistance=12,FastSidestep=true,InstinctBurstSpeed=64,ReduceMotion=false}
 API.Config=Config
 local featureCleanup={}
@@ -512,7 +512,7 @@ function API.Diagnostics()
 		"canAttack: "..tostring(char and char:GetAttribute("canAttack")),
 		"busy: "..tostring(char and char:GetAttribute("busy")),
 		"WalkSpeed: "..tostring(hum and hum.WalkSpeed),"Root anchored: "..tostring(root and root.Anchored),
-		"Last error: "..tostring(API.LastError or "none"),"Last input error: "..tostring(API.LastInputError or "none"),"Last input: "..tostring(API.LastInput or "none"),"Detected controls: "..#controls}
+		"Session: "..tostring(API.Session and API.Session.Status or "not ready"),"Last error: "..tostring(API.LastError or "none"),"Last input error: "..tostring(API.LastInputError or "none"),"Last input: "..tostring(API.LastInput or "none"),"Detected controls: "..#controls}
     if API.Instinct then
         table.insert(report,API.Instinct.Diagnostics())
         table.insert(report,"Ultra Instinct: "..API.Instinct.Status.." | reactions="..API.Instinct.Reactions.." | cue="..tostring(API.Instinct.LastCue).." | mode="..tostring(API.Instinct.LastMode).." | distance="..tostring(API.Instinct.LastDistance).." | tracked hitboxes="..tostring(API.Instinct.TrackedHitboxes))
@@ -996,7 +996,8 @@ local function combo(hum,root,distance,screen)
 		brain.Melee+=1
 		local basic=find(attackNames)
 		local length=basic and numberAttribute(basic.Button,"ComboLength",3,1,5) or 3
-		local spacing=basic and numberAttribute(basic.Button,"AttackInterval",0.36,0.15,2) or 0.36
+		local fallback=Config.FastAttack and Config.AttackDelay or 0.36
+		local spacing=basic and numberAttribute(basic.Button,"AttackInterval",fallback,0.15,2) or fallback
 		brain.NextAt=elapsedTime+(brain.Melee>=length and math.max(0.5,spacing) or spacing)+roll(0,0.035)
 		if brain.Melee>=length then brain.Melee=0; brain.SkillStreak=0; brain.Spacing=roll(4.2,6.1) end
 		status("Melee combo")
@@ -1102,7 +1103,8 @@ function API.Step(dt)
         API.Instinct.Step(dt)
         visualAge+=dt
         if visualAge>=0.15 then API.Visuals.Step(visualAge);API.UI.Step();visualAge=0 end
-        step(dt)
+        if API.Session then API.Session.Step(dt) end
+        if not API.Session or not API.Session.Retreating then step(dt) end
     end)
 end
 function API.Unload()
@@ -1110,6 +1112,7 @@ function API.Unload()
 	Config.UltraInstinct=false
     if API.Instinct then API.Instinct.Destroy() end
     API.SetEnabled(false); alive=false
+    if API.Session then API.Session.Destroy() end
     if API.Visuals then API.Visuals.Destroy() end
     if API.UI then API.UI.Destroy() end
     for _,clean in ipairs(featureCleanup) do pcall(clean) end;table.clear(featureCleanup)
@@ -1246,6 +1249,7 @@ return function(ctx)
     function M.Destroy() local players={};for plr in pairs(M.Rows) do table.insert(players,plr) end;for _,plr in ipairs(players) do remove(plr) end end
     return M
 end
+
 end)()
 local MakeInstinct=(function()
 -- Detected-attack escapes: one local teleport by default, with an optional walking/native mode.
@@ -1842,6 +1846,7 @@ return function(ctx)
     end
     return M
 end
+
 end)()
 local MakeInterface=(function()
 -- Native animated interface; no downloaded UI library or flashing effects.
@@ -1887,6 +1892,7 @@ return function(ctx)
     local fit=make("UIScale",{Scale=1},window)
     local surface=make("CanvasGroup",{Size=UDim2.fromScale(1,1),BackgroundColor3=C.Base,BorderSizePixel=0,GroupTransparency=1},window);round(surface,15)
     make("UIStroke",{Color=C.Line,Thickness=1},surface)
+    make("UIGradient",{Rotation=75,Color=ColorSequence.new(C.Base,Color3.fromRGB(23,24,40))},surface)
     local opening=make("UIScale",{Scale=0.96},surface)
     local top=make("Frame",{Name="Handle",Active=true,Size=UDim2.new(1,0,0,64),BackgroundTransparency=1},surface)
     local logoFallback=text(top,"R",25,C.Text,UDim2.fromOffset(18,17),UDim2.fromOffset(30,30),true)
@@ -1902,17 +1908,20 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.9",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 6.0",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local marker=make("Frame",{Position=UDim2.fromOffset(0,24),Size=UDim2.fromOffset(3,22),BackgroundColor3=C.Accent,BorderSizePixel=0},side);round(marker,2)
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
+        local index=({combat=1,movement=2,visuals=3,settings=4})[id] or 1
+        animate(marker,{Position=UDim2.fromOffset(0,24+(index-1)*45)},0.22)
         for key,page in pairs(pages) do
             page.Visible=key==id
             if key==id then page.GroupTransparency=cfg.ReduceMotion and 0 or 1;animate(page,{GroupTransparency=0},0.22) end
         end
         for key,b in pairs(tabs) do animate(b,{BackgroundTransparency=key==id and 0 or 1,TextColor3=key==id and C.Accent or C.Sub}) end
     end
-    for i,entry in ipairs({{"combat","Combat"},{"visuals","Visuals"},{"settings","Settings"}}) do
+    for i,entry in ipairs({{"combat","Combat"},{"movement","Movement"},{"visuals","Visuals"},{"settings","Settings"}}) do
         local id,title=entry[1],entry[2]
         local tab=make("TextButton",{Name="Tab_"..id,Position=UDim2.fromOffset(10,17+(i-1)*45),Size=UDim2.new(1,-20,0,36),Text="  "..title,
             Font=Enum.Font.GothamBold,TextSize=12,TextXAlignment=Enum.TextXAlignment.Left,BackgroundColor3=C.Raised,TextColor3=C.Sub,BorderSizePixel=0,AutoButtonColor=false},side);round(tab,8);hover(tab);tabs[id]=tab
@@ -1959,12 +1968,12 @@ return function(ctx)
         local knob=make("Frame",{AnchorPoint=Vector2.new(0.5,0.5),Size=UDim2.fromOffset(11,11),BackgroundColor3=C.Text,BorderSizePixel=0},track);round(knob,7)
         local function paint()
             local a=(cfg[key]-minimum)/(maximum-minimum);fill.Size=UDim2.fromScale(a,1);knob.Position=UDim2.fromScale(a,0.5)
-            value.Text=percent and tostring(math.floor(cfg[key]*100)).."%" or tostring(math.floor(cfg[key]))
+            value.Text=percent and tostring(math.floor(cfg[key]*100)).."%" or maximum<1 and string.format("%.2fs",cfg[key]) or tostring(math.floor(cfg[key]))
         end
         local function update(x)
             if track.AbsoluteSize.X<=0 then return end
             local a=math.clamp((x-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1);local v=minimum+(maximum-minimum)*a
-            API.SetOption(key,percent and v or math.floor(v+0.5))
+            API.SetOption(key,(percent or maximum<1) and v or math.floor(v+0.5))
         end
         table.insert(paints,paint);paint()
         connect(hit.InputBegan,function(input)
@@ -1981,6 +1990,16 @@ return function(ctx)
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
+    local attacks=section(M.combat,"FAST ATTACK","Requests basic attacks through the detected game control. Game cooldowns and attack locks still apply.")
+    toggle(attacks,"FastAttack","Fast Attack")
+    local requestStatus=text(attacks,"Ready",10,C.Sub,nil,UDim2.new(1,0,0,24));requestStatus.TextWrapped=true
+    slider(attacks,"AttackDelay","Request interval (seconds)",0.15,0.6)
+    local safety=section(M.combat,"LOW HEALTH RETREAT","Walks toward a checked nearby escape point when health is low. Pauses Auto Farm while retreating; your joystick always takes priority.")
+    toggle(safety,"AutoSafeTeleport","Auto retreat at low health")
+    slider(safety,"SafeHealthThreshold","Health threshold (%)",10,60)
+    local movement=section(M.movement,"MOVEMENT SPEED","Applies your chosen walking speed once. If the game changes it, Rift preserves the game value. Turn off to restore the original speed.")
+    toggle(movement,"SpeedEnabled","Enable custom WalkSpeed")
+    slider(movement,"WalkSpeed","WalkSpeed",16,80)
     local defense=section(M.combat,"ULTRA INSTINCT","Teleport mode makes one capped local relocation on a detected nearby attack. Hidden damage bounds are estimated. The server can correct the move; avoiding every ability is not guaranteed.")
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
     toggle(defense,"TeleportDodge","Teleport dodge")
@@ -2070,6 +2089,7 @@ return function(ctx)
         play.BackgroundColor3=API.Enabled and Color3.fromRGB(99,52,70) or C.Accent;play.TextColor3=API.Enabled and C.Text or C.Base
         walkToggle.Visible=not cfg.TeleportDodge;walkSpeed.Visible=not cfg.TeleportDodge;nativeTest.Visible=not cfg.TeleportDodge
         testEscape.Text=cfg.TeleportDodge and "Test teleport" or "Test sidestep"
+        requestStatus.Text=API.Session and (API.Session.Status.." · "..API.Session.AttackRequests.." basic requests") or "Ready"
         status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.AutomaticMoves.." automatic · "..API.Instinct.TestMoves.." tests"..(API.Instinct.Recording and " · RECORDING" or "")..(not cfg.TeleportDodge and API.Instinct.BurstRejected and " · boost overridden by game" or "")
     end
     function M.Destroy()
@@ -2080,15 +2100,17 @@ return function(ctx)
     animate(surface,{GroupTransparency=0},0.25);animate(opening,{Scale=1},0.28)
     return M
 end
+
 end)()
 function API.SetOption(key,value)
     if not alive or Config[key]==nil or type(value)~=type(Config[key]) then return false end
     if type(value)=="number" then
         if value~=value or math.abs(value)==math.huge then return false end
-        local bounds={ChamOpacity={0,1},InstinctRange={6,24},InstinctMaxDistance={4,12},InstinctBurstSpeed={24,96}}
+        local bounds={AttackDelay={0.15,0.6},SafeHealthThreshold={10,60},WalkSpeed={16,80},ChamOpacity={0,1},InstinctRange={6,24},InstinctMaxDistance={4,12},InstinctBurstSpeed={24,96}}
         value=math.clamp(value,bounds[key][1],bounds[key][2])
     end
     Config[key]=value
+    if API.Session and (key=="SpeedEnabled" or key=="AutoSafeTeleport") then API.Session.Reset() end
     if key=="FastSidestep" and not value or key=="TeleportDodge" then API.Instinct.Stop() end
     if key=="UltraInstinct" then
         if value then scan() else API.Instinct.Stop() end
@@ -2096,6 +2118,98 @@ function API.SetOption(key,value)
     API.Visuals.Step(0);API.Instinct.Step(0);if API.UI then API.UI.Step() end
     return true
 end
+local MakeSession=(function()
+-- Linked-script features adapted to Rift's mobile control discovery and normal movement.
+return function(ctx)
+ local cfg=ctx.Config
+ local M={Retreating=false,Status="Ready",AttackRequests=0}
+ local speedHum,speedBase,speedApplied,speedRequest
+ local pausedRequest,elapsed,attackAt,scanAt,retryAt= nil,0,0,0,0
+ local retreatHum,retreatGoal,retreatUntil
+ local function restoreSpeed()
+  if speedHum and speedHum.WalkSpeed==speedApplied then speedHum.WalkSpeed=speedBase end
+  speedHum,speedBase,speedApplied,speedRequest=nil,nil,nil,nil
+ end
+ local function endRetreat()
+  if retreatHum then pcall(function() ctx.Resume(retreatHum) end) end
+  retreatHum,retreatGoal=nil,nil;M.Retreating=false
+ end
+ function M.Reset()
+  endRetreat();restoreSpeed();pausedRequest=nil
+ end
+ function M.Step(dt)
+  elapsed+=dt
+  local char,hum,root=ctx.Body()
+  local allowed=ctx.CanRun()
+  if not root or not hum or not allowed or root.Anchored or hum.PlatformStand or hum.Health<=0 then
+   M.Reset();M.Status="Paused";return
+  end
+  local speedLocked=char:GetAttribute("canRun")==false or char:GetAttribute("LOCKED_INPUTS")==true or char:GetAttribute("cutsceneLock")==true
+  -- One write per requested speed. A game override wins until the user changes the setting.
+  if speedHum and (speedHum~=hum or speedHum.WalkSpeed~=speedApplied) then
+   pausedRequest=speedRequest;restoreSpeed();M.Status="Game changed speed · preserved"
+  end
+  if not cfg.SpeedEnabled or speedLocked then restoreSpeed()
+  elseif pausedRequest~=cfg.WalkSpeed and (speedHum~=hum or speedRequest~=cfg.WalkSpeed) then
+   if speedHum~=hum then restoreSpeed();speedHum=hum;speedBase=hum.WalkSpeed end
+   speedRequest=cfg.WalkSpeed;speedApplied=speedRequest;hum.WalkSpeed=speedApplied
+  end
+  if not cfg.SpeedEnabled then pausedRequest=nil end
+  if ctx.Manual() then endRetreat();M.Status="Paused for your movement";return end
+  local health=hum.Health/math.max(1,hum.MaxHealth)*100
+  if M.Retreating then
+   if not cfg.AutoSafeTeleport or retreatHum~=hum or speedLocked or elapsed>=retreatUntil or health>=cfg.SafeHealthThreshold+10 or (retreatGoal-root.Position).Magnitude<3 then
+    endRetreat();retryAt=elapsed+3
+   else hum:MoveTo(retreatGoal);M.Status="Low health · retreating";return end
+  end
+  if cfg.AutoSafeTeleport and not speedLocked and health<=cfg.SafeHealthThreshold and elapsed>=retryAt then
+   local threat=ctx.Nearest(root,40)
+   local other
+   if threat then other=select(3,ctx.Body(threat)) end
+   if other then
+    local delta=Vector3.new(root.Position.X-other.Position.X,0,root.Position.Z-other.Position.Z)
+    if delta.Magnitude>.1 then
+     local away=delta.Unit;local side=Vector3.new(-away.Z,0,away.X)
+     for _,direction in ipairs({away,(away+side).Unit,(away-side).Unit,side,side*-1}) do
+      local goal=root.Position+direction*16
+      if ctx.Safe(root,goal) then
+       ctx.StopFarmMovement();retreatHum,retreatGoal,retreatUntil=hum,goal,elapsed+2.5
+       M.Retreating=true;hum:MoveTo(goal);M.Status="Low health · retreating";return
+      end
+     end
+    end
+   end
+   retryAt=elapsed+1;M.Status="Low health · no clear retreat path"
+  end
+  -- While Auto Farm is active its combo scheduler owns attack requests.
+  if cfg.FastAttack and not ctx.Farming() and elapsed>=attackAt and not speedLocked
+   and char:GetAttribute("canAttack")~=false and char:GetAttribute("busy")~=true then
+   attackAt=elapsed+cfg.AttackDelay
+   if elapsed>=scanAt then ctx.Scan();scanAt=elapsed+1 end
+   local target=ctx.Nearest(root,8)
+   local targetChar,targetRoot
+   if target then targetChar,_,targetRoot=ctx.Body(target) end
+   if targetRoot and ctx.Sight(root.Position,targetRoot.Position,targetChar) then
+    local ok,reason=ctx.Attack(targetRoot)
+    if ok then M.AttackRequests+=1;M.Status="Basic attack requested"
+    else M.Status=reason or "Attack input unavailable" end
+   end
+  end
+ end
+ function M.Steer()
+  if M.Retreating and retreatHum and retreatGoal then
+   local root=retreatHum.Parent and retreatHum.Parent:FindFirstChild("HumanoidRootPart")
+   if root then
+    local delta=retreatGoal-root.Position
+    retreatHum:Move(delta.Magnitude>.5 and delta.Unit or Vector3.new(),false)
+   end
+  end
+ end
+ M.Destroy=M.Reset
+ return M
+end
+
+end)()
 local started,startError=pcall(function()
     API.Visuals=MakeVisuals({Config=Config,Gui=gui,Body=body})
     API.ResolveHero=API.Visuals.Resolve
@@ -2133,6 +2247,27 @@ local started,startError=pcall(function()
             return clear,clear and nil or ("Destination blocked by "..tostring(obstacle))
         end,
     })
+    API.Session=MakeSession({Config=Config,Body=function(plr) return body(plr or LocalPlayer) end,
+        CanRun=function() return alive and focused and not dragging and not Input:GetFocusedTextBox() end,Manual=manualMovement,
+        Farming=function() return API.Enabled end,Scan=scan,Sight=lineOfSight,Safe=safeLocalMove,
+        Resume=resumeUserMovement,StopFarmMovement=function() reset() end,
+        Nearest=function(root,range)
+            local best,distance=nil,range
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if opposing(plr) then local _,_,other=body(plr);if other then
+                    local d=(other.Position-root.Position).Magnitude
+                    if d<distance then best,distance=plr,d end
+                end end
+            end
+            return best
+        end,
+        Attack=function(targetRoot)
+            local camera=workspace.CurrentCamera;if not camera then return false,"Camera missing" end
+            local point,onScreen=camera:WorldToViewportPoint(targetRoot.Position)
+            if not onScreen or point.Z<=0 then return false,"Face a nearby target to attack" end
+            return primary(point)
+        end,
+    })
     API.UI=MakeInterface({API=API,Config=Config,Gui=gui,Brand=Brand,
         RegisterCleanup=function(fn) table.insert(featureCleanup,fn) end,
         Drag=function(on) dragging=on;if on then reset();API.Instinct.Stop() end end,
@@ -2158,7 +2293,8 @@ connect(Input.WindowFocusReleased,function() table.clear(manualKeys);table.clear
 connect(Run.Heartbeat,API.Step)
 Run:BindToRenderStep("RiftAutoPlayAim",Enum.RenderPriority.Camera.Value+1,function(dt)
     guarded(function()
-        if API.Instinct.Dodging then API.Instinct.Steer(dt)
+        if API.Session and API.Session.Retreating then API.Session.Steer()
+        elseif API.Instinct.Dodging then API.Instinct.Steer(dt)
         else steer(dt);faceBody(dt);aim(dt) end
     end)
 end)

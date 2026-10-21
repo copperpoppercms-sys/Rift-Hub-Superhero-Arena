@@ -41,6 +41,7 @@ return function(ctx)
     local fit=make("UIScale",{Scale=1},window)
     local surface=make("CanvasGroup",{Size=UDim2.fromScale(1,1),BackgroundColor3=C.Base,BorderSizePixel=0,GroupTransparency=1},window);round(surface,15)
     make("UIStroke",{Color=C.Line,Thickness=1},surface)
+    make("UIGradient",{Rotation=75,Color=ColorSequence.new(C.Base,Color3.fromRGB(23,24,40))},surface)
     local opening=make("UIScale",{Scale=0.96},surface)
     local top=make("Frame",{Name="Handle",Active=true,Size=UDim2.new(1,0,0,64),BackgroundTransparency=1},surface)
     local logoFallback=text(top,"R",25,C.Text,UDim2.fromOffset(18,17),UDim2.fromOffset(30,30),true)
@@ -56,17 +57,20 @@ return function(ctx)
     local close=headerButton("Close","×",-43);local minimize=headerButton("Minimize","−",-78)
     local side=make("Frame",{Name="Sidebar",Position=UDim2.fromOffset(0,64),Size=UDim2.new(0,136,1,-64),BackgroundColor3=C.Panel,BorderSizePixel=0},surface)
     local content=make("Frame",{Position=UDim2.fromOffset(136,64),Size=UDim2.new(1,-136,1,-91),BackgroundTransparency=1,ClipsDescendants=true},surface)
-    local footer=text(surface,"N0VA_0100  /  RIFT 5.9",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local footer=text(surface,"N0VA_0100  /  RIFT 6.0",9,C.Sub,UDim2.new(0,151,1,-23),UDim2.new(1,-166,0,18))
+    local marker=make("Frame",{Position=UDim2.fromOffset(0,24),Size=UDim2.fromOffset(3,22),BackgroundColor3=C.Accent,BorderSizePixel=0},side);round(marker,2)
     local pages,tabs,selected={},{},"combat"
     local function select(id)
         selected=id
+        local index=({combat=1,movement=2,visuals=3,settings=4})[id] or 1
+        animate(marker,{Position=UDim2.fromOffset(0,24+(index-1)*45)},0.22)
         for key,page in pairs(pages) do
             page.Visible=key==id
             if key==id then page.GroupTransparency=cfg.ReduceMotion and 0 or 1;animate(page,{GroupTransparency=0},0.22) end
         end
         for key,b in pairs(tabs) do animate(b,{BackgroundTransparency=key==id and 0 or 1,TextColor3=key==id and C.Accent or C.Sub}) end
     end
-    for i,entry in ipairs({{"combat","Combat"},{"visuals","Visuals"},{"settings","Settings"}}) do
+    for i,entry in ipairs({{"combat","Combat"},{"movement","Movement"},{"visuals","Visuals"},{"settings","Settings"}}) do
         local id,title=entry[1],entry[2]
         local tab=make("TextButton",{Name="Tab_"..id,Position=UDim2.fromOffset(10,17+(i-1)*45),Size=UDim2.new(1,-20,0,36),Text="  "..title,
             Font=Enum.Font.GothamBold,TextSize=12,TextXAlignment=Enum.TextXAlignment.Left,BackgroundColor3=C.Raised,TextColor3=C.Sub,BorderSizePixel=0,AutoButtonColor=false},side);round(tab,8);hover(tab);tabs[id]=tab
@@ -113,12 +117,12 @@ return function(ctx)
         local knob=make("Frame",{AnchorPoint=Vector2.new(0.5,0.5),Size=UDim2.fromOffset(11,11),BackgroundColor3=C.Text,BorderSizePixel=0},track);round(knob,7)
         local function paint()
             local a=(cfg[key]-minimum)/(maximum-minimum);fill.Size=UDim2.fromScale(a,1);knob.Position=UDim2.fromScale(a,0.5)
-            value.Text=percent and tostring(math.floor(cfg[key]*100)).."%" or tostring(math.floor(cfg[key]))
+            value.Text=percent and tostring(math.floor(cfg[key]*100)).."%" or maximum<1 and string.format("%.2fs",cfg[key]) or tostring(math.floor(cfg[key]))
         end
         local function update(x)
             if track.AbsoluteSize.X<=0 then return end
             local a=math.clamp((x-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1);local v=minimum+(maximum-minimum)*a
-            API.SetOption(key,percent and v or math.floor(v+0.5))
+            API.SetOption(key,(percent or maximum<1) and v or math.floor(v+0.5))
         end
         table.insert(paints,paint);paint()
         connect(hit.InputBegan,function(input)
@@ -135,6 +139,16 @@ return function(ctx)
         TextColor3=C.Base,BackgroundColor3=C.Accent,BorderSizePixel=0,AutoButtonColor=false},farm);round(play,8);hover(play)
     local status=text(farm,"Off",11,C.Sub,nil,UDim2.new(1,0,0,32));status.Name="Status";status.TextWrapped=true
     connect(play.Activated,function() API.SetEnabled(not API.Enabled) end)
+    local attacks=section(M.combat,"FAST ATTACK","Requests basic attacks through the detected game control. Game cooldowns and attack locks still apply.")
+    toggle(attacks,"FastAttack","Fast Attack")
+    local requestStatus=text(attacks,"Ready",10,C.Sub,nil,UDim2.new(1,0,0,24));requestStatus.TextWrapped=true
+    slider(attacks,"AttackDelay","Request interval (seconds)",0.15,0.6)
+    local safety=section(M.combat,"LOW HEALTH RETREAT","Walks toward a checked nearby escape point when health is low. Pauses Auto Farm while retreating; your joystick always takes priority.")
+    toggle(safety,"AutoSafeTeleport","Auto retreat at low health")
+    slider(safety,"SafeHealthThreshold","Health threshold (%)",10,60)
+    local movement=section(M.movement,"MOVEMENT SPEED","Applies your chosen walking speed once. If the game changes it, Rift preserves the game value. Turn off to restore the original speed.")
+    toggle(movement,"SpeedEnabled","Enable custom WalkSpeed")
+    slider(movement,"WalkSpeed","WalkSpeed",16,80)
     local defense=section(M.combat,"ULTRA INSTINCT","Teleport mode makes one capped local relocation on a detected nearby attack. Hidden damage bounds are estimated. The server can correct the move; avoiding every ability is not guaranteed.")
     toggle(defense,"UltraInstinct","Enable Ultra Instinct")
     toggle(defense,"TeleportDodge","Teleport dodge")
@@ -224,6 +238,7 @@ return function(ctx)
         play.BackgroundColor3=API.Enabled and Color3.fromRGB(99,52,70) or C.Accent;play.TextColor3=API.Enabled and C.Text or C.Base
         walkToggle.Visible=not cfg.TeleportDodge;walkSpeed.Visible=not cfg.TeleportDodge;nativeTest.Visible=not cfg.TeleportDodge
         testEscape.Text=cfg.TeleportDodge and "Test teleport" or "Test sidestep"
+        requestStatus.Text=API.Session and (API.Session.Status.." · "..API.Session.AttackRequests.." basic requests") or "Ready"
         status.Text=API.Status;instinct.Text=API.Instinct.Status.."  ·  "..API.Instinct.AutomaticMoves.." automatic · "..API.Instinct.TestMoves.." tests"..(API.Instinct.Recording and " · RECORDING" or "")..(not cfg.TeleportDodge and API.Instinct.BurstRejected and " · boost overridden by game" or "")
     end
     function M.Destroy()
